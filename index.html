@@ -1243,6 +1243,8 @@
         .tag-primary { background: var(--primary-faint); color: var(--primary-dark); }
         .tag-purple { background: var(--purple-light); color: var(--purple); }
     </style>
+    <!-- Supabase JS SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
     <!-- Setup Wizard -->
@@ -2993,18 +2995,24 @@
             
             if (!child.painLog) child.painLog = [];
             child.painLog.push(painEntry);
-            
+
             // Check for severe pain alert
             if (painEntry.level >= 7) {
                 showSeverePainAlert(child, painEntry);
             }
-            
+
             // Check for fever emergency
             if (temperature && temperature >= 101.3) {
                 showFeverEmergencyAlert(child, temperature);
             }
-            
+
             saveData();
+
+            // Cloud sync
+            (async () => {
+                const familyId = await getCurrentFamilyId();
+                if (familyId) await pushPainLogToCloud(painEntry, child.id, familyId);
+            })();
             document.querySelector('.modal').remove();
             renderSymptomHistory();
         }
@@ -3059,14 +3067,17 @@
             }
             
             if (!child.temperatureLog) child.temperatureLog = [];
-            child.temperatureLog.push({
-                id: Date.now(),
-                temperature: temperature,
-                timestamp: new Date().toISOString()
-            });
-            
+            const tempEntry = { id: Date.now(), temperature, timestamp: new Date().toISOString() };
+            child.temperatureLog.push(tempEntry);
+
             saveData();
             document.querySelector('.modal').remove();
+
+            // Cloud sync
+            (async () => {
+                const familyId = await getCurrentFamilyId();
+                if (familyId) await pushTempLogToCloud(tempEntry, child.id, familyId);
+            })();
             
             // Check for fever emergency
             if (temperature >= 101.3) {
@@ -3799,6 +3810,19 @@
             appData.children.push(child);
             appData.currentChildId = child.id;
             appData.setupComplete = true;
+
+            // Sync to Supabase if logged in
+            (async () => {
+                const familyId = await getCurrentFamilyId();
+                if (familyId) {
+                    const saved = await pushChildToCloud(child, familyId);
+                    if (saved) {
+                        child.id = saved.id; // use DB UUID
+                        appData.currentChildId = saved.id;
+                    }
+                    await pushMedsToCloud(child.medications, child.id, familyId);
+                }
+            })();
             
             // Add hematologist to contacts if provided and not already added
             if (wizardData.hematologistName) {
@@ -6114,6 +6138,203 @@
             setTimeout(() => alert('✅ Report downloaded! Open in any text editor or print directly.'), 100);
         }
 
+        // ── SUPABASE INIT ─────────────────────────────────────────────────
+        const SUPABASE_URL = 'https://zprmzrngdgniexphjgem.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpwcm16cm5nZGduaWV4cGhqZ2VtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwNTc0MjksImV4cCI6MjA5NjYzMzQyOX0.5mNmKuOtTzyJrdzM6mlRIWqytPe2tUac_AK-cdMGL0A';
+        const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        // ── SUPABASE CLOUD SYNC ───────────────────────────────────────────
+
+        async function syncChildrenFromCloud() {
+            const { data: { user } } = await sb.auth.getUser();
+            if (!user) return;
+
+            const { data: dbUser } = await sb.from('users').select('family_id').eq('auth_id', user.id).single();
+            if (!dbUser) return;
+
+            const familyId = dbUser.family_id;
+
+            const [{ data: children }, { data: meds }, { data: contacts }] = await Promise.all([
+                sb.from('children').select('*').eq('family_id', familyId),
+                sb.from('medications').select('*').eq('family_id', familyId).eq('is_active', true),
+                sb.from('contacts').select('*').eq('family_id', familyId)
+            ]);
+
+            if (children && children.length > 0) {
+                appData.children = children.map(c => ({
+                    id: c.id,
+                    name: c.name,
+                    birthDate: c.birth_date,
+                    displayAge: calculateAge(c.birth_date).displayAge,
+                    ageInMonths: calculateAge(c.birth_date).ageInMonths,
+                    weight: c.weight_lbs,
+                    gender: c.gender,
+                    bloodType: c.blood_type,
+                    diseaseType: c.disease_type,
+                    emoji: c.emoji || '👧🏾',
+                    color: c.color || childColors[0],
+                    photo: c.photo_url,
+                    selfTracking: c.self_tracking,
+                    hydrationGoal: c.hydration_goal || 48,
+                    daysPainFree: c.days_pain_free || 0,
+                    waterIntake: 0,
+                    todayMeds: 0,
+                    notes: [],
+                    painLog: [],
+                    temperatureLog: [],
+                    symptoms: [],
+                    weightHistory: [],
+                    medications: meds ? meds.filter(m => m.child_id === c.id).map(m => ({
+                        id: m.id,
+                        name: m.name,
+                        dose: m.dose,
+                        times: m.times || [],
+                        type: m.type || 'daily',
+                        critical: m.is_critical,
+                        notes: m.notes || '',
+                        doctor: m.doctor || '',
+                        pharmacy: m.pharmacy || '',
+                        refillDate: m.refill_date || '',
+                        startDate: m.start_date || ''
+                    })) : []
+                }));
+
+                if (!appData.currentChildId && appData.children.length > 0) {
+                    appData.currentChildId = appData.children[0].id;
+                }
+                appData.setupComplete = true;
+            }
+
+            if (contacts && contacts.length > 0) {
+                appData.contacts = contacts.map(c => ({
+                    id: c.id,
+                    name: c.name,
+                    type: c.type,
+                    phone: c.phone,
+                    email: c.email,
+                    address: c.address,
+                    notes: c.notes,
+                    isPrimary: c.is_primary
+                }));
+            }
+
+            saveData();
+            updateUI();
+            updateFamilyMembersPreview();
+        }
+
+        async function syncPainLogsFromCloud(childId, familyId) {
+            const { data } = await sb.from('pain_logs')
+                .select('*').eq('child_id', childId).order('logged_at', { ascending: false }).limit(90);
+            const child = appData.children.find(c => c.id === childId);
+            if (child && data) {
+                child.painLog = data.map(p => ({
+                    id: p.id,
+                    level: p.severity,
+                    location: p.locations ? p.locations.join(', ') : '',
+                    emoji: p.emoji,
+                    temperature: p.temperature,
+                    helped: p.what_helped || [],
+                    notes: p.notes,
+                    startTime: p.logged_at,
+                    resolved: false
+                }));
+            }
+        }
+
+        async function syncTempLogsFromCloud(childId) {
+            const { data } = await sb.from('temperature_logs')
+                .select('*').eq('child_id', childId).order('logged_at', { ascending: false }).limit(30);
+            const child = appData.children.find(c => c.id === childId);
+            if (child && data) {
+                child.temperatureLog = data.map(t => ({
+                    id: t.id,
+                    temperature: t.temperature_f,
+                    timestamp: t.logged_at
+                }));
+            }
+        }
+
+        async function pushChildToCloud(childData, familyId) {
+            const { data, error } = await sb.from('children').upsert({
+                id: typeof childData.id === 'string' && childData.id.length > 10 ? childData.id : undefined,
+                family_id: familyId,
+                name: childData.name,
+                birth_date: childData.birthDate,
+                disease_type: childData.diseaseType,
+                gender: childData.gender,
+                blood_type: childData.bloodType,
+                weight_lbs: childData.weight,
+                emoji: childData.emoji,
+                color: childData.color,
+                self_tracking: childData.selfTracking || false,
+                hydration_goal: childData.hydrationGoal
+            }, { onConflict: 'id' }).select().single();
+            return data;
+        }
+
+        async function pushMedsToCloud(medications, childId, familyId) {
+            if (!medications || medications.length === 0) return;
+            await sb.from('medications').upsert(
+                medications.map(m => ({
+                    child_id: childId,
+                    family_id: familyId,
+                    name: m.name,
+                    dose: m.dose,
+                    times: m.times,
+                    type: m.type || 'daily',
+                    is_critical: m.critical || false,
+                    doctor: m.doctor || null,
+                    pharmacy: m.pharmacy || null,
+                    refill_date: m.refillDate || null,
+                    start_date: m.startDate || null,
+                    is_active: true
+                }))
+            );
+        }
+
+        async function pushPainLogToCloud(painEntry, childId, familyId) {
+            await sb.from('pain_logs').insert({
+                child_id: childId,
+                family_id: familyId,
+                severity: painEntry.level,
+                locations: painEntry.location ? [painEntry.location] : [],
+                emoji: painEntry.emoji,
+                temperature: painEntry.temperature,
+                what_helped: painEntry.helped || [],
+                notes: painEntry.notes,
+                logged_at: painEntry.startTime || new Date().toISOString()
+            });
+        }
+
+        async function pushTempLogToCloud(tempEntry, childId, familyId) {
+            await sb.from('temperature_logs').insert({
+                child_id: childId,
+                family_id: familyId,
+                temperature_f: tempEntry.temperature,
+                notes: tempEntry.notes || null,
+                logged_at: tempEntry.timestamp || new Date().toISOString()
+            });
+        }
+
+        async function pushNoteToCloud(note, childId, familyId) {
+            await sb.from('notes').insert({
+                child_id: childId,
+                family_id: familyId,
+                title: note.title || null,
+                content: note.text || note.content,
+                mood_tags: note.mood ? [note.mood] : [],
+                created_at: note.date || new Date().toISOString()
+            });
+        }
+
+        async function getCurrentFamilyId() {
+            const { data: { user } } = await sb.auth.getUser();
+            if (!user) return null;
+            const { data } = await sb.from('users').select('family_id').eq('auth_id', user.id).single();
+            return data?.family_id || null;
+        }
+
         // ── FAMILY LOGIN ─────────────────────────────────────────────────
 
         let familyAuth = {
@@ -6137,7 +6358,7 @@
             document.getElementById('signupForm').style.display = tab === 'signup' ? 'block' : 'none';
         }
 
-        function handleLogin() {
+        async function handleLogin() {
             const email = document.getElementById('loginEmail').value.trim();
             const password = document.getElementById('loginPassword').value;
 
@@ -6145,27 +6366,42 @@
                 alert('Please enter your email and password.'); return;
             }
 
-            // Check localStorage for existing account
-            const accounts = JSON.parse(localStorage.getItem('ss_accounts') || '[]');
-            const account = accounts.find(a => a.email === email && a.password === btoa(password));
-
-            if (!account) {
-                alert('Email or password incorrect. Please try again.'); return;
+            const { data, error } = await sb.auth.signInWithPassword({ email, password });
+            if (error) {
+                // Fallback to localStorage for existing offline users
+                const accounts = JSON.parse(localStorage.getItem('ss_accounts') || '[]');
+                const account = accounts.find(a => a.email === email && a.password === btoa(password));
+                if (!account) {
+                    alert('Email or password incorrect. Please try again.'); return;
+                }
+                familyAuth.isLoggedIn = true;
+                familyAuth.currentUser = account;
+                familyAuth.familyCode = account.familyCode;
+                localStorage.setItem('ss_auth', JSON.stringify(familyAuth));
+                localStorage.setItem('ss_auth_dismissed', 'true');
+                closeAuthScreen();
+                updateFamilyMembersPreview();
+                alert(`Welcome back, ${account.name}! 💙`);
+                return;
             }
 
-            familyAuth.isLoggedIn = true;
-            familyAuth.currentUser = account;
-            familyAuth.familyCode = account.familyCode;
-            familyAuth.familyMembers = accounts.filter(a => a.familyCode === account.familyCode);
+            // Fetch user profile from DB
+            const { data: profile } = await sb.from('users').select('*').eq('auth_id', data.user.id).single();
+            const { data: family } = profile ? await sb.from('families').select('*').eq('id', profile.family_id).single() : { data: null };
 
+            familyAuth.isLoggedIn = true;
+            familyAuth.currentUser = { id: data.user.id, name: profile?.full_name || email, email, role: profile?.role || 'parent', familyCode: family?.family_code, familyId: profile?.family_id };
+            familyAuth.familyCode = family?.family_code;
             localStorage.setItem('ss_auth', JSON.stringify(familyAuth));
             localStorage.setItem('ss_auth_dismissed', 'true');
+
             closeAuthScreen();
+            await syncChildrenFromCloud();
             updateFamilyMembersPreview();
-            alert(`Welcome back, ${account.name}! 💙`);
+            alert(`Welcome back! 💙`);
         }
 
-        function handleSignup() {
+        async function handleSignup() {
             const name = document.getElementById('signupName').value.trim();
             const email = document.getElementById('signupEmail').value.trim();
             const password = document.getElementById('signupPassword').value;
@@ -6178,30 +6414,38 @@
                 alert('Password must be at least 8 characters.'); return;
             }
 
-            const accounts = JSON.parse(localStorage.getItem('ss_accounts') || '[]');
-            if (accounts.find(a => a.email === email)) {
-                alert('An account with this email already exists. Please sign in.'); return;
+            const { data, error } = await sb.auth.signUp({ email, password });
+            if (error) {
+                alert('Sign up failed: ' + error.message); return;
             }
 
             const familyCode = generateFamilyCode();
-            const newAccount = {
-                id: Date.now().toString(),
-                name, email,
-                password: btoa(password),
-                role,
-                familyCode,
-                isPrimary: true,
-                permissions: 'admin',
-                joinedAt: new Date().toISOString()
-            };
 
-            accounts.push(newAccount);
-            localStorage.setItem('ss_accounts', JSON.stringify(accounts));
+            // Create family record
+            const { data: family, error: famErr } = await sb.from('families').insert({
+                family_code: familyCode,
+                name: name + "'s Family",
+                plan: 'beta'
+            }).select().single();
+
+            if (famErr || !family) {
+                alert('Account created but family setup failed. Please contact support.'); return;
+            }
+
+            // Create user profile
+            await sb.from('users').insert({
+                auth_id: data.user.id,
+                family_id: family.id,
+                full_name: name,
+                email,
+                role,
+                is_primary: true
+            });
 
             familyAuth.isLoggedIn = true;
-            familyAuth.currentUser = newAccount;
+            familyAuth.currentUser = { id: data.user.id, name, email, role, familyCode, familyId: family.id, isPrimary: true };
             familyAuth.familyCode = familyCode;
-            familyAuth.familyMembers = [newAccount];
+            familyAuth.familyMembers = [familyAuth.currentUser];
             localStorage.setItem('ss_auth', JSON.stringify(familyAuth));
             localStorage.setItem('ss_auth_dismissed', 'true');
 
@@ -6211,52 +6455,46 @@
             alert(`Account created! 💙\n\nYour Family Code: ${familyCode}\n\nShare this code with family members so they can join your account.`);
         }
 
-        function joinWithFamilyCode() {
+        async function joinWithFamilyCode() {
             const code = document.getElementById('familyCodeInput').value.trim().toUpperCase();
             if (!code || code.length < 8) {
                 alert('Please enter a valid family code (e.g. STRONG-1234).'); return;
             }
 
-            const accounts = JSON.parse(localStorage.getItem('ss_accounts') || '[]');
-            const familyExists = accounts.find(a => a.familyCode === code);
-
-            if (!familyExists) {
+            const { data: family } = await sb.from('families').select('*').eq('family_code', code).single();
+            if (!family) {
                 alert('Family code not found. Please check the code and try again.'); return;
             }
 
-            // Show join form
             const name = prompt('Your name:');
             const email = prompt('Your email:');
             const password = prompt('Create a password (min 8 characters):');
-            const role = 'caregiver';
 
             if (!name || !email || !password) return;
 
-            const newMember = {
-                id: Date.now().toString(),
-                name, email,
-                password: btoa(password),
-                role,
-                familyCode: code,
-                isPrimary: false,
-                permissions: 'view',
-                joinedAt: new Date().toISOString()
-            };
+            const { data, error } = await sb.auth.signUp({ email, password });
+            if (error) { alert('Sign up failed: ' + error.message); return; }
 
-            accounts.push(newMember);
-            localStorage.setItem('ss_accounts', JSON.stringify(accounts));
+            await sb.from('users').insert({
+                auth_id: data.user.id,
+                family_id: family.id,
+                full_name: name,
+                email,
+                role: 'caregiver',
+                is_primary: false
+            });
 
             familyAuth.isLoggedIn = true;
-            familyAuth.currentUser = newMember;
+            familyAuth.currentUser = { id: data.user.id, name, email, role: 'caregiver', familyCode: code, familyId: family.id, isPrimary: false };
             familyAuth.familyCode = code;
-            familyAuth.familyMembers = accounts.filter(a => a.familyCode === code);
             localStorage.setItem('ss_auth', JSON.stringify(familyAuth));
             localStorage.setItem('ss_auth_dismissed', 'true');
 
             closeAuthScreen();
+            await syncChildrenFromCloud();
             updateFamilyMembersPreview();
             trackFamilyMemberJoined();
-            alert(`You've joined the family account! 💙\nPermissions: View only\n(The account owner can update your permissions)`);
+            alert(`You've joined the family account! 💙`);
         }
 
         function skipAuth() {
@@ -6611,12 +6849,20 @@
         function callEmergency() { if (confirm('Call 911?')) window.location.href = 'tel:911'; }
 
         // Initialize App
-        document.addEventListener('DOMContentLoaded', () => {
+        document.addEventListener('DOMContentLoaded', async () => {
             loadData();
 
             // Load daily quote immediately — don't wait for updateUI
             const quoteEl = document.getElementById('dailyQuote');
             if (quoteEl) quoteEl.textContent = getDailyQuote();
+
+            // Check for active Supabase session and sync data
+            const { data: { session } } = await sb.auth.getSession();
+            if (session) {
+                familyAuth.isLoggedIn = true;
+                localStorage.setItem('ss_auth_dismissed', 'true');
+                await syncChildrenFromCloud();
+            }
 
             if (!appData.setupComplete) {
                 document.getElementById('setupWizard').classList.add('active');
