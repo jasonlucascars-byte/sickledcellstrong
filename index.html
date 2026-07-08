@@ -5,8 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SickleStrong — Multi-Child SCD Tracking App</title>
     <meta name="description" content="The only app for managing sickle cell disease across every age. Track pain, fevers, medications and hydration — built by a parent for the whole SCD community.">
-    <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#6c3fcf">
+    <!-- PWA: Installable app -->
+    <link rel="manifest" href="/manifest.json">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="SickleStrong">
+    <meta name="mobile-web-app-capable" content="yes">
     <script async defer src="https://scripts.simpleanalyticscdn.com/latest.js"></script>
     <noscript><img src="https://queue.simpleanalyticscdn.com/noscript.gif" alt="" referrerpolicy="no-referrer-when-downgrade" /></noscript>
     <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
@@ -1157,6 +1163,11 @@
         .perm-view { background: var(--warning-light); color: var(--warning); }
         .perm-admin { background: var(--purple-light); color: var(--purple); }
 
+        @keyframes slideUp {
+            from { transform: translateY(30px); opacity: 0; }
+            to   { transform: translateY(0);    opacity: 1; }
+        }
+
         /* Responsive */
         @media (max-width: 480px) {
             .quick-stats {
@@ -1805,20 +1816,28 @@
         // NO yellow emojis - families requested authentic representation
         const emojiOptions = [
             // Dark skin tones (primary SCD demographic)
-            '👧🏿', '👦🏿', '👶🏿', '🧒🏿', '👨🏿', '👩🏿',
-            
+            '👧🏿', '👦🏿', '👶🏿', '🧒🏿',
             // Medium-dark skin tones
-            '👧🏾', '👦🏾', '👶🏾', '🧒🏾', '👨🏾', '👩🏾',
-            
+            '👧🏾', '👦🏾', '👶🏾', '🧒🏾',
             // Medium skin tones (Hispanic/Latino families)
-            '👧🏽', '👦🏽', '👶🏽', '🧒🏽', '👨🏽', '👩🏽',
-            
-            // Curly hair variants (represents natural hair textures & closest to locs)
+            '👧🏽', '👦🏽', '👶🏽', '🧒🏽',
+            // Curly hair variants
             '👨🏿‍🦱', '👩🏿‍🦱', '👨🏾‍🦱', '👩🏾‍🦱',
-            
-            // Medium-light and light skin tones (requested by families)
+            // Medium-light and light skin tones
             '👧🏼', '👦🏼', '👶🏼', '🧒🏼',
             '👧🏻', '👦🏻', '👶🏻', '🧒🏻'
+        ];
+
+        // Adult emojis — shown automatically for self-tracking profiles
+        const adultEmojiOptions = [
+            // Dark skin — primary SCD demographic
+            '👨🏿', '👩🏿', '👨🏿‍🦱', '👩🏿‍🦱', '👴🏿', '👵🏿',
+            // Medium-dark skin
+            '👨🏾', '👩🏾', '👨🏾‍🦱', '👩🏾‍🦱', '👴🏾', '👵🏾',
+            // Medium skin (Hispanic/Latino community)
+            '👨🏽', '👩🏽', '👨🏽‍🦱', '👩🏽‍🦱', '👴🏽', '👵🏽',
+            // Medium-light and light skin
+            '👨🏼', '👩🏼', '👨🏻', '👩🏻',
         ];
         
         const motivationalQuotes = [
@@ -2125,15 +2144,47 @@
                     </div>
                     <div class="input-group">
                         <label class="input-label">Choose Avatar</label>
-                        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-bottom:8px;">
-                            ${emojiOptions.map((emoji, i) => `
+
+                        ${wizardData.selfTracking ? `
+                        <!-- ADULT EMOJIS — shown first for self-tracking -->
+                        <div style="font-size:11px;font-weight:700;color:var(--primary);
+                                    text-transform:uppercase;letter-spacing:.08em;
+                                    margin-bottom:8px;font-family:'Sora',sans-serif;">
+                            Adults
+                        </div>
+                        <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-bottom:12px;">
+                            ${adultEmojiOptions.map((emoji) => `
                                 <button type="button" onclick="selectEmoji('${emoji}')"
-                                    style="font-size:32px;padding:12px;border:2px solid ${wizardData.childEmoji === emoji ? 'var(--primary)' : 'var(--border)'};
-                                    border-radius:12px;background:${wizardData.childEmoji === emoji ? 'rgba(14,168,154,0.1)' : 'white'};cursor:pointer;">
+                                    style="font-size:28px;padding:10px;
+                                           border:2px solid ${wizardData.childEmoji === emoji ? 'var(--primary)' : 'var(--border)'};
+                                           border-radius:12px;
+                                           background:${wizardData.childEmoji === emoji ? 'var(--primary-faint)' : 'white'};
+                                           cursor:pointer;transition:all 0.15s;">
                                     ${emoji}
                                 </button>
                             `).join('')}
                         </div>
+                        <div style="font-size:11px;font-weight:700;color:var(--text-light);
+                                    text-transform:uppercase;letter-spacing:.08em;
+                                    margin-bottom:8px;font-family:'Sora',sans-serif;">
+                            All options
+                        </div>
+                        ` : ''}
+
+                        <div style="display:grid;grid-template-columns:repeat(${wizardData.selfTracking ? 6 : 5},1fr);gap:${wizardData.selfTracking ? 6 : 8}px;margin-bottom:8px;">
+                            ${emojiOptions.map((emoji) => `
+                                <button type="button" onclick="selectEmoji('${emoji}')"
+                                    style="font-size:${wizardData.selfTracking ? 24 : 28}px;
+                                           padding:${wizardData.selfTracking ? 8 : 10}px;
+                                           border:2px solid ${wizardData.childEmoji === emoji ? 'var(--primary)' : 'var(--border)'};
+                                           border-radius:12px;
+                                           background:${wizardData.childEmoji === emoji ? 'var(--primary-faint)' : 'white'};
+                                           cursor:pointer;transition:all 0.15s;">
+                                    ${emoji}
+                                </button>
+                            `).join('')}
+                        </div>
+
                         <div style="background:var(--primary-faint);padding:10px 12px;border-radius:8px;
                                     border-left:3px solid var(--primary);margin-bottom:12px;">
                             <p style="font-size:11px;color:var(--text);margin:0;line-height:1.5;">
@@ -2142,7 +2193,9 @@
                             </p>
                         </div>
                         <p style="font-size:12px;color:var(--text-light);">
-                            Selected: <span style="font-size:24px;" id="selectedEmoji">${wizardData.childEmoji || '👧🏾'}</span>
+                            Selected: <span style="font-size:24px;" id="selectedEmoji">
+                                ${wizardData.childEmoji || (wizardData.selfTracking ? '👨🏾' : '👧🏾')}
+                            </span>
                         </p>
                     </div>
                     <div class="input-group">
@@ -4837,27 +4890,71 @@
 
         function renderContacts() {
             const container = document.getElementById('contactList');
+            if (!container) return;
+
             if (appData.contacts.length === 0) {
-                container.innerHTML = '<p style="color: var(--text-light); font-size: 14px;">No emergency contacts added</p>';
+                container.innerHTML = `
+                    <div style="text-align:center;padding:20px 10px;">
+                        <div style="font-size:32px;opacity:0.2;margin-bottom:8px;">📞</div>
+                        <div style="font-size:13px;color:var(--text-light);">No emergency contacts yet</div>
+                        <div style="font-size:12px;color:var(--text-light);margin-top:4px;">
+                            Add your hematologist first — they'll show in the Doctor Report too
+                        </div>
+                    </div>`;
                 return;
             }
-            
+
+            // Primary contact first, then medical, then personal
+            const sorted = [...appData.contacts].sort((a, b) => {
+                if (a.isPrimary && !b.isPrimary) return -1;
+                if (!a.isPrimary && b.isPrimary) return 1;
+                return 0;
+            });
+
             let html = '';
-            appData.contacts.forEach(contact => {
+            sorted.forEach(contact => {
                 html += `
-                    <div style="background: var(--bg); padding: 16px; border-radius: 12px; margin-bottom: 12px;">
-                        <div style="font-weight: 600; margin-bottom: 4px;">${contact.name}</div>
-                        <div style="font-size: 13px; color: var(--text-light); margin-bottom: 8px;">${contact.type}</div>
-                        ${contact.phone ? `<div style="font-size: 13px; color: var(--primary); margin-bottom: 4px;">📞 ${contact.phone}</div>` : ''}
-                        ${contact.email ? `<div style="font-size: 13px; color: var(--primary); margin-bottom: 8px;">📧 ${contact.email}</div>` : ''}
-                        <div style="display: flex; gap: 8px;">
-                            ${contact.phone ? `<button class="btn btn-primary btn-small" onclick="window.location.href='tel:${contact.phone}'">Call</button>` : ''}
-                            ${contact.email ? `<button class="btn btn-secondary btn-small" onclick="window.location.href='mailto:${contact.email}'">Email</button>` : ''}
+                    <div style="background:${contact.isPrimary ? 'var(--primary-faint)' : 'var(--bg)'};
+                                padding:14px;border-radius:16px;margin-bottom:10px;
+                                border:1.5px solid ${contact.isPrimary ? 'var(--primary)' : 'transparent'};">
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;">
+                            <div style="display:flex;align-items:flex-start;gap:10px;flex:1;">
+                                <div style="width:40px;height:40px;border-radius:12px;background:white;
+                                            display:flex;align-items:center;justify-content:center;
+                                            font-size:20px;flex-shrink:0;border:1px solid var(--border);">
+                                    ${getContactIcon(contact.type)}
+                                </div>
+                                <div style="min-width:0;">
+                                    <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                                        <span style="font-weight:800;font-size:14px;font-family:'Sora',sans-serif;">${contact.name}</span>
+                                        ${contact.isPrimary ? `<span style="font-size:10px;background:var(--primary);color:white;padding:2px 8px;border-radius:20px;font-weight:700;">⭐ PRIMARY</span>` : ''}
+                                    </div>
+                                    <div style="font-size:12px;color:var(--text-light);margin-top:2px;">${contact.type}</div>
+                                    ${contact.address ? `<div style="font-size:11px;color:var(--text-light);margin-top:2px;">📍 ${contact.address}</div>` : ''}
+                                    ${contact.notes ? `<div style="font-size:11px;color:var(--text-mid);font-style:italic;margin-top:2px;">${contact.notes}</div>` : ''}
+                                </div>
+                            </div>
+                            <button onclick="showAddContact(${contact.id})"
+                                    style="background:white;border:1.5px solid var(--border);border-radius:10px;
+                                           padding:5px 10px;font-size:11px;font-weight:600;cursor:pointer;
+                                           color:var(--text-mid);font-family:'Sora',sans-serif;flex-shrink:0;margin-left:8px;">
+                                Edit
+                            </button>
+                        </div>
+                        <div style="display:flex;gap:8px;">
+                            ${contact.phone ? `
+                                <button class="btn btn-primary btn-small" style="flex:1;"
+                                        onclick="window.location.href='tel:${contact.phone}'">📞 Call</button>
+                                <button class="btn btn-secondary btn-small" style="flex:1;"
+                                        onclick="window.location.href='sms:${contact.phone}'">💬 Text</button>` : ''}
+                            ${contact.email ? `
+                                <button class="btn btn-secondary btn-small" style="flex:1;"
+                                        onclick="window.location.href='mailto:${contact.email}'">📧 Email</button>` : ''}
                         </div>
                     </div>
                 `;
             });
-            
+
             container.innerHTML = html;
         }
 
@@ -5529,86 +5626,190 @@
                 `✅ Weight saved: ${entry.weightDisplay}\n💧 Hydration goal updated to ${newGoal} oz/day`
             ), 100);
         }
-        function showAddContact() {
+        const contactTypes = [
+            { id: 'Pediatric Hematologist', icon: '🩺', group: 'medical' },
+            { id: 'Primary Care Doctor',    icon: '👨‍⚕️', group: 'medical' },
+            { id: 'Hospital / ER',          icon: '🏥', group: 'medical' },
+            { id: 'Pharmacy',               icon: '💊', group: 'medical' },
+            { id: 'Specialist',             icon: '🔬', group: 'medical' },
+            { id: 'Family Member',          icon: '👨‍👩‍👧', group: 'personal' },
+            { id: 'Friend',                 icon: '🤝', group: 'personal' },
+            { id: 'Neighbor',               icon: '🏠', group: 'personal' },
+            { id: 'School / Nurse',         icon: '🏫', group: 'personal' },
+            { id: 'Other',                  icon: '📇', group: 'personal' },
+        ];
+
+        function getContactIcon(type) {
+            const found = contactTypes.find(t => t.id === type);
+            return found ? found.icon : '📇';
+        }
+
+        function showAddContact(editId = null) {
+            const existing = editId ? appData.contacts.find(c => c.id === editId) : null;
+
             const modal = document.createElement('div');
             modal.className = 'modal active';
             modal.innerHTML = `
-                <div class="modal-content" style="max-width: 450px;">
-                    <button class="modal-close" onclick="this.closest('.modal').remove()">×</button>
-                    <div class="modal-title">📞 Add Emergency Contact</div>
-                    
-                    <div class="input-group">
-                        <label class="input-label">Contact Type</label>
-                        <select class="input-field" id="contactType">
-                            <option value="Family Member">Family Member</option>
-                            <option value="Friend">Friend</option>
-                            <option value="Neighbor">Neighbor</option>
-                            <option value="Pediatric Hematologist">Pediatric Hematologist</option>
-                            <option value="Primary Care Doctor">Primary Care Doctor</option>
-                            <option value="Hospital">Hospital</option>
-                            <option value="Other">Other</option>
-                        </select>
+                <div class="modal-content" style="max-width:480px;padding:0;overflow:hidden;">
+
+                    <!-- Header -->
+                    <div style="background:linear-gradient(135deg,#0f0f14,#1e1040);
+                                padding:20px 24px;display:flex;justify-content:space-between;align-items:center;">
+                        <div>
+                            <div style="color:rgba(14,168,154,0.8);font-size:11px;font-weight:700;
+                                        letter-spacing:.1em;text-transform:uppercase;">Emergency Contacts</div>
+                            <div style="color:white;font-size:18px;font-weight:800;
+                                        font-family:'Sora',sans-serif;">${existing ? 'Edit Contact' : 'Add Contact'}</div>
+                        </div>
+                        <button class="modal-close" onclick="this.closest('.modal').remove()"
+                                style="color:white;background:rgba(255,255,255,0.1);">×</button>
                     </div>
-                    
-                    <div class="input-group">
-                        <label class="input-label">Name</label>
-                        <input type="text" class="input-field" id="contactName" placeholder="Contact name">
+
+                    <div style="padding:20px;max-height:70vh;overflow-y:auto;">
+
+                        <!-- Contact Type — icon grid -->
+                        <div style="font-size:12px;font-weight:700;color:var(--primary);text-transform:uppercase;
+                                    letter-spacing:.08em;margin-bottom:10px;font-family:'Sora',sans-serif;">
+                            Contact Type
+                        </div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:18px;">
+                            ${contactTypes.map(t => `
+                                <label id="ctLabel_${t.id.replace(/[^a-zA-Z]/g,'')}"
+                                       style="display:flex;align-items:center;gap:8px;padding:10px 12px;
+                                              background:var(--bg);border-radius:12px;cursor:pointer;
+                                              border:1.5px solid ${existing && existing.type === t.id ? 'var(--primary)' : 'transparent'};
+                                              transition:all 0.15s;">
+                                    <input type="radio" name="contactType" value="${t.id}"
+                                           ${existing && existing.type === t.id ? 'checked' : ''}
+                                           style="accent-color:var(--primary);"
+                                           onchange="highlightContactType(this)">
+                                    <span style="font-size:16px;">${t.icon}</span>
+                                    <span style="font-size:12px;font-weight:600;">${t.id}</span>
+                                </label>
+                            `).join('')}
+                        </div>
+
+                        <div class="input-group">
+                            <label class="input-label">Name *</label>
+                            <input type="text" class="input-field" id="contactName"
+                                   placeholder="Contact name" value="${existing ? existing.name : ''}">
+                        </div>
+
+                        <div class="input-group">
+                            <label class="input-label">Phone Number *</label>
+                            <input type="tel" class="input-field" id="contactPhone"
+                                   placeholder="(123) 456-7890" value="${existing ? existing.phone || '' : ''}">
+                        </div>
+
+                        <div class="input-group">
+                            <label class="input-label">Email (Optional)</label>
+                            <input type="email" class="input-field" id="contactEmail"
+                                   placeholder="email@example.com" value="${existing ? existing.email || '' : ''}">
+                        </div>
+
+                        <div class="input-group">
+                            <label class="input-label">Address (Optional)</label>
+                            <input type="text" class="input-field" id="contactAddress"
+                                   placeholder="Office / hospital address" value="${existing ? existing.address || '' : ''}">
+                        </div>
+
+                        <div class="input-group">
+                            <label class="input-label">Notes (Optional)</label>
+                            <textarea class="input-field" id="contactNotes" rows="2"
+                                      placeholder="Available weekdays, after-hours line, etc.">${existing ? existing.notes || '' : ''}</textarea>
+                        </div>
+
+                        <!-- Primary contact toggle -->
+                        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:12px;
+                                      background:var(--primary-faint);border-radius:12px;">
+                            <input type="checkbox" id="contactPrimary"
+                                   ${existing && existing.isPrimary ? 'checked' : ''}
+                                   style="width:18px;height:18px;accent-color:var(--primary);">
+                            <div>
+                                <div style="font-weight:700;font-size:13px;color:var(--primary-dark);">⭐ Primary Contact</div>
+                                <div style="font-size:11px;color:var(--text-light);">Shows first · one-tap call from Emergency tab</div>
+                            </div>
+                        </label>
                     </div>
-                    
-                    <div class="input-group">
-                        <label class="input-label">Phone Number</label>
-                        <input type="tel" class="input-field" id="contactPhone" placeholder="(123) 456-7890">
+
+                    <!-- Footer -->
+                    <div style="padding:16px 20px;border-top:1px solid var(--border);
+                                display:flex;gap:10px;background:white;">
+                        ${existing ? `
+                        <button class="btn btn-secondary" style="flex:1;"
+                                onclick="deleteContact(${existing.id})">🗑️ Delete</button>` : `
+                        <button class="btn btn-secondary" style="flex:1;"
+                                onclick="this.closest('.modal').remove()">Cancel</button>`}
+                        <button class="btn btn-primary" style="flex:2;"
+                                onclick="saveNewContact(${editId || 'null'})">
+                            ${existing ? '✅ Save Changes' : '📞 Add Contact'}
+                        </button>
                     </div>
-                    
-                    <div class="input-group">
-                        <label class="input-label">Email (Optional)</label>
-                        <input type="email" class="input-field" id="contactEmail" placeholder="email@example.com">
-                    </div>
-                    
-                    <div class="input-group">
-                        <label class="input-label">Notes (Optional)</label>
-                        <textarea class="input-field" id="contactNotes" rows="2" placeholder="Available weekdays, lives nearby, etc."></textarea>
-                    </div>
-                    
-                    <button class="btn btn-primary btn-full" onclick="saveNewContact()">Add Contact</button>
                 </div>
             `;
             document.body.appendChild(modal);
         }
-        
-        function saveNewContact() {
-            const type = document.getElementById('contactType').value;
+
+        function highlightContactType(radio) {
+            document.querySelectorAll('[id^="ctLabel_"]').forEach(l => {
+                l.style.borderColor = 'transparent';
+                l.style.background = 'var(--bg)';
+            });
+            const label = radio.closest('label');
+            if (label) {
+                label.style.borderColor = 'var(--primary)';
+                label.style.background = 'var(--primary-faint)';
+            }
+        }
+
+        function saveNewContact(editId = null) {
+            const typeRadio = document.querySelector('input[name="contactType"]:checked');
             const name = document.getElementById('contactName').value.trim();
             const phone = document.getElementById('contactPhone').value.trim();
-            const email = document.getElementById('contactEmail').value.trim();
-            const notes = document.getElementById('contactNotes').value.trim();
-            
-            if (!name) {
-                alert('Please enter contact name');
-                return;
+
+            if (!typeRadio) { alert('Please select a contact type.'); return; }
+            if (!name)  { alert('Please enter contact name.'); return; }
+            if (!phone) { alert('Please enter phone number.'); return; }
+
+            const isPrimary = document.getElementById('contactPrimary').checked;
+
+            // Only one primary at a time
+            if (isPrimary) {
+                appData.contacts.forEach(c => c.isPrimary = false);
             }
-            
-            if (!phone) {
-                alert('Please enter phone number');
-                return;
-            }
-            
-            const newContact = {
-                id: Date.now(),
-                type: type,
-                name: name,
-                phone: phone,
-                email: email,
-                notes: notes
+
+            const contactData = {
+                type: typeRadio.value,
+                name,
+                phone,
+                email: document.getElementById('contactEmail').value.trim(),
+                address: document.getElementById('contactAddress').value.trim(),
+                notes: document.getElementById('contactNotes').value.trim(),
+                isPrimary
             };
-            
-            appData.contacts.push(newContact);
+
+            if (editId) {
+                const existing = appData.contacts.find(c => c.id === editId);
+                if (existing) Object.assign(existing, contactData);
+            } else {
+                appData.contacts.push({ id: Date.now(), ...contactData });
+            }
+
             saveData();
             getCurrentFamilyId().then(fid => { if (fid) cloudSync(() => _pushContact(newContact, fid)); });
-            document.querySelector('.modal').remove();
+            document.querySelector('.modal.active')?.remove();
             updateUI();
-            
-            setTimeout(() => alert(`✅ ${name} added to emergency contacts`), 100);
+            setTimeout(() => alert(`✅ ${name} ${editId ? 'updated' : 'added to emergency contacts'}`), 100);
+        }
+
+        function deleteContact(id) {
+            const contact = appData.contacts.find(c => c.id === id);
+            if (!contact) return;
+            if (!confirm(`Remove ${contact.name} from emergency contacts?`)) return;
+            appData.contacts = appData.contacts.filter(c => c.id !== id);
+            saveData();
+            document.querySelector('.modal.active')?.remove();
+            updateUI();
         }
         function showNewPost() {
             const modal = document.createElement('div');
@@ -5717,22 +5918,49 @@
                         <div style="flex:1;height:1px;background:var(--border);"></div>
                     </div>
 
-                    <!-- Emoji Picker -->
-                    <div style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; margin-bottom: 20px;" id="iconEmojiGrid">
+                    <!-- Emoji Picker — adult row first for self-tracking -->
+                    ${child.selfTracking ? `
+                    <div style="font-size:11px;font-weight:700;color:var(--primary);
+                                text-transform:uppercase;letter-spacing:.08em;
+                                margin-bottom:8px;font-family:'Sora',sans-serif;">
+                        Adults
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-bottom:12px;">
+                        ${adultEmojiOptions.map(emoji => `
+                            <button type="button" onclick="selectChildIcon('${emoji}')"
+                                style="font-size:26px;padding:8px;
+                                       border:2px solid ${child.emoji === emoji && !child.photo ? 'var(--primary)' : 'var(--border)'};
+                                       border-radius:12px;
+                                       background:${child.emoji === emoji && !child.photo ? 'var(--primary-faint)' : 'white'};
+                                       cursor:pointer;transition:all 0.15s;">
+                                ${emoji}
+                            </button>
+                        `).join('')}
+                    </div>
+                    <div style="font-size:11px;font-weight:700;color:var(--text-light);
+                                text-transform:uppercase;letter-spacing:.08em;
+                                margin-bottom:8px;font-family:'Sora',sans-serif;">
+                        All options
+                    </div>` : ''}
+
+                    <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:20px;" id="iconEmojiGrid">
                         ${emojiOptions.map(emoji => `
                             <button type="button" onclick="selectChildIcon('${emoji}')"
-                                style="font-size: 28px; padding: 10px; border: 2px solid ${child.emoji === emoji && !child.photo ? 'var(--primary)' : 'var(--border)'}; 
-                                border-radius: 12px; background: ${child.emoji === emoji && !child.photo ? 'var(--primary-faint)' : 'white'}; 
-                                cursor: pointer; transition: all 0.2s; line-height: 1;"
-                                onmouseover="this.style.borderColor='var(--primary)';this.style.background='var(--primary-faint)'"
-                                onmouseout="if('${emoji}' !== getCurrentChild().emoji || getCurrentChild().photo){this.style.borderColor='var(--border)';this.style.background='white';}">
+                                style="font-size:${child.selfTracking ? 22 : 28}px;
+                                       padding:${child.selfTracking ? 7 : 10}px;
+                                       border:2px solid ${child.emoji === emoji && !child.photo ? 'var(--primary)' : 'var(--border)'};
+                                       border-radius:12px;
+                                       background:${child.emoji === emoji && !child.photo ? 'var(--primary-faint)' : 'white'};
+                                       cursor:pointer;transition:all 0.15s;line-height:1;">
                                 ${emoji}
                             </button>
                         `).join('')}
                     </div>
 
-                    <div style="background: var(--primary-faint); border-radius: 12px; padding: 12px; font-size: 12px; color: var(--primary-dark); line-height: 1.6;">
-                        💙 <strong>Tip:</strong> As your child grows, update their icon to match their age!
+                    <div style="background:var(--primary-faint);border-radius:12px;padding:12px;font-size:12px;color:var(--primary-dark);line-height:1.6;">
+                        ${child.selfTracking
+                            ? '💙 <strong>Tip:</strong> Pick the emoji that feels most like you!'
+                            : '💙 <strong>Tip:</strong> As your child grows, update their icon to match their age!'}
                     </div>
                 </div>
             `;
@@ -5772,11 +6000,11 @@
             const child = getCurrentChild();
             if (!child) return;
             child.photo = null;
-            child.emoji = '👧🏾';
+            child.emoji = child.selfTracking ? '👨🏾' : '👧🏾';
             saveData();
             updateUI();
             document.getElementById('changeIconModal')?.remove();
-            changeChildIcon(); // Reopen to pick emoji
+            changeChildIcon();
         }
 
         function selectChildIcon(emoji) {
@@ -6750,7 +6978,7 @@
             // Reset wizard for self-tracking
             wizardData = {
                 selfTracking: true,
-                childEmoji: '🧑🏾',
+                childEmoji: '👨🏾',
                 diseaseType: 'HbSS',
                 parentName: appData.parentName || '',
                 parentRelation: 'Self',
@@ -6960,8 +7188,106 @@
         function callEmergency() { if (confirm('Call 911?')) window.location.href = 'tel:911'; }
 
         // Initialize App
+
+        // ── PWA: SERVICE WORKER + INSTALL PROMPT + OFFLINE ──────────────
+        let deferredInstallPrompt = null;
+
+        function registerServiceWorker() {
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('/sw.js').catch(() => {
+                    // SW not available (e.g. sw.js not deployed yet) — app works normally
+                });
+            }
+        }
+
+        // Capture the browser's install prompt and show our own banner
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredInstallPrompt = e;
+
+            // Don't nag — show once, and never again if dismissed
+            if (localStorage.getItem('ss_install_dismissed')) return;
+
+            setTimeout(showInstallBanner, 4000);
+        });
+
+        function showInstallBanner() {
+            if (document.getElementById('installBanner')) return;
+            const banner = document.createElement('div');
+            banner.id = 'installBanner';
+            banner.style.cssText = `
+                position:fixed;bottom:76px;left:12px;right:12px;z-index:2500;
+                background:linear-gradient(135deg,#0f0f14,#1e1040);
+                border:1.5px solid var(--primary);border-radius:18px;
+                padding:14px 16px;display:flex;align-items:center;gap:12px;
+                box-shadow:0 12px 40px rgba(0,0,0,0.35);
+                animation:slideUp 0.4s ease;`;
+            banner.innerHTML = `
+                <div style="width:44px;height:44px;border-radius:12px;flex-shrink:0;
+                            background:linear-gradient(135deg,var(--primary),var(--purple));
+                            display:flex;align-items:center;justify-content:center;font-size:22px;">💙</div>
+                <div style="flex:1;min-width:0;">
+                    <div style="color:white;font-weight:700;font-size:14px;font-family:'Sora',sans-serif;">
+                        Install SickleStrong
+                    </div>
+                    <div style="color:rgba(255,255,255,0.55);font-size:12px;margin-top:1px;">
+                        Add to your home screen — works offline
+                    </div>
+                </div>
+                <button onclick="installApp()"
+                        style="background:linear-gradient(135deg,var(--primary),var(--purple));
+                               color:white;border:none;border-radius:50px;padding:9px 16px;
+                               font-size:13px;font-weight:700;cursor:pointer;
+                               font-family:'Sora',sans-serif;flex-shrink:0;">Install</button>
+                <button onclick="dismissInstallBanner()"
+                        style="background:none;border:none;color:rgba(255,255,255,0.5);
+                               font-size:18px;cursor:pointer;padding:4px;flex-shrink:0;">×</button>
+            `;
+            document.body.appendChild(banner);
+        }
+
+        async function installApp() {
+            if (!deferredInstallPrompt) return;
+            deferredInstallPrompt.prompt();
+            const { outcome } = await deferredInstallPrompt.userChoice;
+            if (outcome === 'accepted') {
+                trackEvent('app_installed');
+            }
+            deferredInstallPrompt = null;
+            document.getElementById('installBanner')?.remove();
+        }
+
+        function dismissInstallBanner() {
+            localStorage.setItem('ss_install_dismissed', 'true');
+            document.getElementById('installBanner')?.remove();
+        }
+
+        // ── OFFLINE INDICATOR ────────────────────────────────────────────
+        function updateOnlineStatus() {
+            let bar = document.getElementById('offlineBar');
+            if (!navigator.onLine) {
+                if (!bar) {
+                    bar = document.createElement('div');
+                    bar.id = 'offlineBar';
+                    bar.style.cssText = `
+                        position:fixed;top:0;left:0;right:0;z-index:3500;
+                        background:var(--warning);color:#3a2a00;
+                        text-align:center;padding:7px;font-size:12px;font-weight:700;
+                        font-family:'Sora',sans-serif;`;
+                    bar.textContent = "📡 You're offline — your data still saves on this device";
+                    document.body.appendChild(bar);
+                }
+            } else {
+                bar?.remove();
+            }
+        }
+        window.addEventListener('online', updateOnlineStatus);
+        window.addEventListener('offline', updateOnlineStatus);
+
         document.addEventListener('DOMContentLoaded', async () => {
             loadData();
+            registerServiceWorker();
+            updateOnlineStatus();
 
             // Load daily quote immediately — don't wait for updateUI
             const quoteEl = document.getElementById('dailyQuote');
