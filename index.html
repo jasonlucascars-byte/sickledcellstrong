@@ -2514,14 +2514,16 @@
             const child = getCurrentChild();
             if (!child.notes) child.notes = [];
             
-            child.notes.push({
+            const note = {
                 id: Date.now(),
                 date: new Date().toISOString(),
                 mood: window.selectedMood || '😊',
                 text: text
-            });
-            
+            };
+            child.notes.push(note);
+
             saveData();
+            getCurrentFamilyId().then(fid => { if (fid) cloudSync(() => _pushNote(note, child.id, fid)); });
             renderNotes();
             document.querySelector('.modal').remove();
         }
@@ -3575,6 +3577,7 @@
             if (!child.symptoms) child.symptoms = [];
             child.symptoms.push(entry);
             saveData();
+            getCurrentFamilyId().then(fid => { if (fid) cloudSync(() => _pushSymptom(entry, child.id, fid)); });
             trackSymptomLogged();
 
             // Flag if high severity or emergency symptoms
@@ -4559,6 +4562,7 @@
             const child = getCurrentChild();
             child.waterIntake = Math.min(child.waterIntake + oz, child.hydrationGoal);
             saveData();
+            getCurrentFamilyId().then(fid => { if (fid) cloudSync(() => _pushHydration(child.waterIntake, child.hydrationGoal, child.id, fid)); });
             updateHydrationProgress();
             
             if (child.waterIntake >= child.hydrationGoal) {
@@ -5225,6 +5229,7 @@
             if (!child.medications) child.medications = [];
             medsToAdd.forEach(m => child.medications.push(m));
             saveData();
+            getCurrentFamilyId().then(fid => { if (fid) cloudSync(() => _pushMeds(medsToAdd, child.id, fid)); });
             document.querySelector('.modal.active')?.remove();
             updateUI();
 
@@ -5515,6 +5520,7 @@
             }
 
             saveData();
+            getCurrentFamilyId().then(fid => { if (fid) cloudSync(() => _pushWeight(entry, child.id, fid)); });
             document.querySelector('.modal.active')?.remove();
             updateUI();
 
@@ -5598,6 +5604,7 @@
             
             appData.contacts.push(newContact);
             saveData();
+            getCurrentFamilyId().then(fid => { if (fid) cloudSync(() => _pushContact(newContact, fid)); });
             document.querySelector('.modal').remove();
             updateUI();
             
@@ -6143,63 +6150,148 @@
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpwcm16cm5nZGduaWV4cGhqZ2VtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwNTc0MjksImV4cCI6MjA5NjYzMzQyOX0.5mNmKuOtTzyJrdzM6mlRIWqytPe2tUac_AK-cdMGL0A';
         const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-        // ── SUPABASE CLOUD SYNC ───────────────────────────────────────────
+        // Canonical table: `users` (has auth_id col → auth.users.id)
+        // RLS pattern: family_id IN (SELECT family_id FROM users WHERE auth_id = auth.uid())
 
-        async function syncChildrenFromCloud() {
+        // ── SUPABASE HELPERS ──────────────────────────────────────────────
+
+        let _cachedFamilyId = null;
+
+        async function getCurrentFamilyId() {
+            if (_cachedFamilyId) return _cachedFamilyId;
+            const { data: { user } } = await sb.auth.getUser();
+            if (!user) return null;
+            const { data } = await sb.from('users').select('family_id').eq('auth_id', user.id).single();
+            _cachedFamilyId = data?.family_id || null;
+            return _cachedFamilyId;
+        }
+
+        function cloudSync(fn) {
+            // Fire-and-forget async cloud write — never blocks the UI
+            fn().catch(err => console.warn('[SickleStrong cloud sync]', err));
+        }
+
+        // ── SUPABASE LOAD (on login / session restore) ────────────────────
+
+        async function syncAllFromCloud() {
             const { data: { user } } = await sb.auth.getUser();
             if (!user) return;
 
             const { data: dbUser } = await sb.from('users').select('family_id').eq('auth_id', user.id).single();
             if (!dbUser) return;
 
-            const familyId = dbUser.family_id;
+            _cachedFamilyId = dbUser.family_id;
+            const familyId = _cachedFamilyId;
 
-            const [{ data: children }, { data: meds }, { data: contacts }] = await Promise.all([
-                sb.from('children').select('*').eq('family_id', familyId),
+            const [
+                { data: children },
+                { data: meds },
+                { data: contacts },
+                { data: painLogs },
+                { data: tempLogs },
+                { data: symptomRows },
+                { data: weightRows },
+                { data: noteRows }
+            ] = await Promise.all([
+                sb.from('children').select('*').eq('family_id', familyId).eq('is_active', true),
                 sb.from('medications').select('*').eq('family_id', familyId).eq('is_active', true),
-                sb.from('contacts').select('*').eq('family_id', familyId)
+                sb.from('contacts').select('*').eq('family_id', familyId).order('sort_order'),
+                sb.from('pain_logs').select('*').eq('family_id', familyId).order('logged_at', { ascending: false }).limit(200),
+                sb.from('temperature_logs').select('*').eq('family_id', familyId).order('logged_at', { ascending: false }).limit(200),
+                sb.from('symptoms').select('*').eq('family_id', familyId).order('logged_at', { ascending: false }).limit(200),
+                sb.from('weight_logs').select('*').eq('family_id', familyId).order('logged_at', { ascending: false }).limit(100),
+                sb.from('notes').select('*').eq('family_id', familyId).order('created_at', { ascending: false }).limit(100)
             ]);
 
             if (children && children.length > 0) {
-                appData.children = children.map(c => ({
-                    id: c.id,
-                    name: c.name,
-                    birthDate: c.birth_date,
-                    displayAge: calculateAge(c.birth_date).displayAge,
-                    ageInMonths: calculateAge(c.birth_date).ageInMonths,
-                    weight: c.weight_lbs,
-                    gender: c.gender,
-                    bloodType: c.blood_type,
-                    diseaseType: c.disease_type,
-                    emoji: c.emoji || '👧🏾',
-                    color: c.color || childColors[0],
-                    photo: c.photo_url,
-                    selfTracking: c.self_tracking,
-                    hydrationGoal: c.hydration_goal || 48,
-                    daysPainFree: c.days_pain_free || 0,
-                    waterIntake: 0,
-                    todayMeds: 0,
-                    notes: [],
-                    painLog: [],
-                    temperatureLog: [],
-                    symptoms: [],
-                    weightHistory: [],
-                    medications: meds ? meds.filter(m => m.child_id === c.id).map(m => ({
-                        id: m.id,
-                        name: m.name,
-                        dose: m.dose,
-                        times: m.times || [],
-                        type: m.type || 'daily',
-                        critical: m.is_critical,
-                        notes: m.notes || '',
-                        doctor: m.doctor || '',
-                        pharmacy: m.pharmacy || '',
-                        refillDate: m.refill_date || '',
-                        startDate: m.start_date || ''
-                    })) : []
-                }));
+                appData.children = children.map((c, idx) => {
+                    const childMeds = (meds || []).filter(m => m.child_id === c.id);
+                    const childPain = (painLogs || []).filter(p => p.child_id === c.id);
+                    const childTemp = (tempLogs || []).filter(t => t.child_id === c.id);
+                    const childSymp = (symptomRows || []).filter(s => s.child_id === c.id);
+                    const childWt   = (weightRows || []).filter(w => w.child_id === c.id);
+                    const childNotes = (noteRows || []).filter(n => n.child_id === c.id);
 
-                if (!appData.currentChildId && appData.children.length > 0) {
+                    const ageData = c.birth_date ? calculateAge(c.birth_date) : { displayAge: 'Unknown', ageInMonths: 0 };
+
+                    // Today's hydration: sum hydration_logs for today (use in-memory until log loads)
+                    return {
+                        id: c.id,
+                        name: c.name,
+                        birthDate: c.birth_date,
+                        displayAge: ageData.displayAge,
+                        ageInMonths: ageData.ageInMonths,
+                        weight: c.weight_lbs,
+                        gender: c.gender,
+                        bloodType: c.blood_type,
+                        diseaseType: c.disease_type,
+                        emoji: c.emoji || '👧🏾',
+                        color: c.color || childColors[idx % childColors.length],
+                        photo: c.photo_url,
+                        selfTracking: c.self_tracking,
+                        hydrationGoal: c.hydration_goal || 48,
+                        daysPainFree: c.days_pain_free || 0,
+                        waterIntake: 0,
+                        todayMeds: 0,
+                        medications: childMeds.map(m => ({
+                            id: m.id,
+                            name: m.name,
+                            dose: m.dose,
+                            times: m.times || [],
+                            type: m.type || 'daily',
+                            critical: m.is_critical,
+                            notes: m.notes || '',
+                            doctor: m.doctor || '',
+                            pharmacy: m.pharmacy || '',
+                            refillDate: m.refill_date || '',
+                            startDate: m.start_date || ''
+                        })),
+                        painLog: childPain.map(p => ({
+                            id: p.id,
+                            level: p.severity,
+                            location: (p.locations || []).join(', '),
+                            emoji: p.emoji,
+                            temperature: p.temperature,
+                            helped: p.what_helped || [],
+                            notes: p.notes,
+                            startTime: p.logged_at,
+                            resolved: false
+                        })),
+                        temperatureLog: childTemp.map(t => ({
+                            id: t.id,
+                            temperature: t.temperature_f,
+                            timestamp: t.logged_at
+                        })),
+                        symptoms: childSymp.map(s => ({
+                            id: s.id,
+                            date: s.logged_at ? s.logged_at.split('T')[0] : '',
+                            time: s.logged_at ? s.logged_at.split('T')[1]?.slice(0,5) : '',
+                            timestamp: s.logged_at,
+                            symptoms: s.symptom_type ? [s.symptom_type] : [],
+                            severity: s.severity,
+                            notes: s.notes,
+                            photo: s.photo_url,
+                            helped: []
+                        })),
+                        weightHistory: childWt.map(w => ({
+                            weight: w.weight_lbs,
+                            weightDisplay: `${w.weight_lbs} lbs`,
+                            date: w.logged_at ? w.logged_at.split('T')[0] : '',
+                            timestamp: w.logged_at,
+                            context: w.context,
+                            notes: w.notes
+                        })),
+                        notes: childNotes.map(n => ({
+                            id: n.id,
+                            date: n.created_at,
+                            mood: (n.mood_tags || [])[0] || '😊',
+                            text: n.content,
+                            title: n.title
+                        }))
+                    };
+                });
+
+                if (!appData.currentChildId || !appData.children.find(c => c.id === appData.currentChildId)) {
                     appData.currentChildId = appData.children[0].id;
                 }
                 appData.setupComplete = true;
@@ -6208,8 +6300,8 @@
             if (contacts && contacts.length > 0) {
                 appData.contacts = contacts.map(c => ({
                     id: c.id,
-                    name: c.name,
                     type: c.type,
+                    name: c.name,
                     phone: c.phone,
                     email: c.email,
                     address: c.address,
@@ -6223,65 +6315,38 @@
             updateFamilyMembersPreview();
         }
 
-        async function syncPainLogsFromCloud(childId, familyId) {
-            const { data } = await sb.from('pain_logs')
-                .select('*').eq('child_id', childId).order('logged_at', { ascending: false }).limit(90);
-            const child = appData.children.find(c => c.id === childId);
-            if (child && data) {
-                child.painLog = data.map(p => ({
-                    id: p.id,
-                    level: p.severity,
-                    location: p.locations ? p.locations.join(', ') : '',
-                    emoji: p.emoji,
-                    temperature: p.temperature,
-                    helped: p.what_helped || [],
-                    notes: p.notes,
-                    startTime: p.logged_at,
-                    resolved: false
-                }));
-            }
-        }
+        // ── SUPABASE PUSH HELPERS (fire-and-forget) ───────────────────────
 
-        async function syncTempLogsFromCloud(childId) {
-            const { data } = await sb.from('temperature_logs')
-                .select('*').eq('child_id', childId).order('logged_at', { ascending: false }).limit(30);
-            const child = appData.children.find(c => c.id === childId);
-            if (child && data) {
-                child.temperatureLog = data.map(t => ({
-                    id: t.id,
-                    temperature: t.temperature_f,
-                    timestamp: t.logged_at
-                }));
-            }
-        }
-
-        async function pushChildToCloud(childData, familyId) {
-            const { data, error } = await sb.from('children').upsert({
-                id: typeof childData.id === 'string' && childData.id.length > 10 ? childData.id : undefined,
+        async function _pushChild(childData, familyId) {
+            const isUUID = typeof childData.id === 'string' && /^[0-9a-f-]{36}$/.test(childData.id);
+            const payload = {
                 family_id: familyId,
                 name: childData.name,
-                birth_date: childData.birthDate,
-                disease_type: childData.diseaseType,
-                gender: childData.gender,
-                blood_type: childData.bloodType,
-                weight_lbs: childData.weight,
-                emoji: childData.emoji,
-                color: childData.color,
+                birth_date: childData.birthDate || null,
+                disease_type: childData.diseaseType || null,
+                gender: childData.gender || null,
+                blood_type: childData.bloodType || null,
+                weight_lbs: childData.weight || null,
+                emoji: childData.emoji || '👧🏾',
+                color: childData.color || null,
                 self_tracking: childData.selfTracking || false,
-                hydration_goal: childData.hydrationGoal
-            }, { onConflict: 'id' }).select().single();
+                hydration_goal: childData.hydrationGoal || 48,
+                is_active: true
+            };
+            if (isUUID) payload.id = childData.id;
+            const { data } = await sb.from('children').upsert(payload, { onConflict: 'id' }).select().single();
             return data;
         }
 
-        async function pushMedsToCloud(medications, childId, familyId) {
+        async function _pushMeds(medications, childId, familyId) {
             if (!medications || medications.length === 0) return;
-            await sb.from('medications').upsert(
+            await sb.from('medications').insert(
                 medications.map(m => ({
                     child_id: childId,
                     family_id: familyId,
                     name: m.name,
-                    dose: m.dose,
-                    times: m.times,
+                    dose: m.dose || null,
+                    times: m.times || [],
                     type: m.type || 'daily',
                     is_critical: m.critical || false,
                     doctor: m.doctor || null,
@@ -6293,46 +6358,92 @@
             );
         }
 
-        async function pushPainLogToCloud(painEntry, childId, familyId) {
+        async function _pushPainLog(entry, childId, familyId) {
+            // pain_logs.severity is CHECK 1-5 in DB
+            const severity = Math.min(5, Math.max(1, Math.round(entry.level)));
             await sb.from('pain_logs').insert({
                 child_id: childId,
                 family_id: familyId,
-                severity: painEntry.level,
-                locations: painEntry.location ? [painEntry.location] : [],
-                emoji: painEntry.emoji,
-                temperature: painEntry.temperature,
-                what_helped: painEntry.helped || [],
-                notes: painEntry.notes,
-                logged_at: painEntry.startTime || new Date().toISOString()
+                severity,
+                locations: entry.location ? entry.location.split(',').map(s => s.trim()).filter(Boolean) : [],
+                emoji: entry.emoji || null,
+                temperature: entry.temperature || null,
+                what_helped: entry.helped || [],
+                notes: entry.notes || null,
+                logged_at: entry.startTime || new Date().toISOString()
             });
         }
 
-        async function pushTempLogToCloud(tempEntry, childId, familyId) {
+        async function _pushTempLog(entry, childId, familyId) {
             await sb.from('temperature_logs').insert({
                 child_id: childId,
                 family_id: familyId,
-                temperature_f: tempEntry.temperature,
-                notes: tempEntry.notes || null,
-                logged_at: tempEntry.timestamp || new Date().toISOString()
+                temperature_f: entry.temperature,
+                notes: entry.notes || null,
+                logged_at: entry.timestamp || new Date().toISOString()
             });
         }
 
-        async function pushNoteToCloud(note, childId, familyId) {
+        async function _pushNote(note, childId, familyId) {
             await sb.from('notes').insert({
                 child_id: childId,
                 family_id: familyId,
                 title: note.title || null,
-                content: note.text || note.content,
+                content: note.text || note.content || '',
                 mood_tags: note.mood ? [note.mood] : [],
                 created_at: note.date || new Date().toISOString()
             });
         }
 
-        async function getCurrentFamilyId() {
-            const { data: { user } } = await sb.auth.getUser();
-            if (!user) return null;
-            const { data } = await sb.from('users').select('family_id').eq('auth_id', user.id).single();
-            return data?.family_id || null;
+        async function _pushSymptom(entry, childId, familyId) {
+            const symptomType = Array.isArray(entry.symptoms) ? entry.symptoms[0] : entry.symptoms;
+            await sb.from('symptoms').insert({
+                child_id: childId,
+                family_id: familyId,
+                symptom_type: symptomType || null,
+                severity: Math.min(5, Math.max(1, entry.severity || 1)),
+                notes: entry.notes || null,
+                photo_url: entry.photo || null,
+                logged_at: entry.timestamp || new Date().toISOString()
+            });
+        }
+
+        async function _pushWeight(entry, childId, familyId) {
+            await sb.from('weight_logs').insert({
+                child_id: childId,
+                family_id: familyId,
+                weight_lbs: entry.weight,
+                notes: entry.notes || null,
+                logged_at: entry.timestamp || new Date().toISOString()
+            });
+        }
+
+        async function _pushContact(contact, familyId) {
+            const isUUID = typeof contact.id === 'string' && /^[0-9a-f-]{36}$/.test(contact.id);
+            const payload = {
+                family_id: familyId,
+                type: contact.type || null,
+                name: contact.name,
+                phone: contact.phone || null,
+                email: contact.email || null,
+                address: contact.address || null,
+                notes: contact.notes || null,
+                is_primary: contact.isPrimary || false
+            };
+            if (isUUID) payload.id = contact.id;
+            await sb.from('contacts').upsert(payload, { onConflict: 'id' });
+        }
+
+        async function _pushHydration(oz, goalOz, childId, familyId) {
+            await sb.from('hydration_logs').insert({
+                child_id: childId,
+                family_id: familyId,
+                amount_oz: oz,
+                total_oz: oz,
+                goal_oz: goalOz,
+                log_date: new Date().toISOString().split('T')[0],
+                logged_at: new Date().toISOString()
+            });
         }
 
         // ── FAMILY LOGIN ─────────────────────────────────────────────────
@@ -6396,7 +6507,7 @@
             localStorage.setItem('ss_auth_dismissed', 'true');
 
             closeAuthScreen();
-            await syncChildrenFromCloud();
+            await syncAllFromCloud();
             updateFamilyMembersPreview();
             alert(`Welcome back! 💙`);
         }
@@ -6491,7 +6602,7 @@
             localStorage.setItem('ss_auth_dismissed', 'true');
 
             closeAuthScreen();
-            await syncChildrenFromCloud();
+            await syncAllFromCloud();
             updateFamilyMembersPreview();
             trackFamilyMemberJoined();
             alert(`You've joined the family account! 💙`);
@@ -6861,7 +6972,7 @@
             if (session) {
                 familyAuth.isLoggedIn = true;
                 localStorage.setItem('ss_auth_dismissed', 'true');
-                await syncChildrenFromCloud();
+                await syncAllFromCloud();
             }
 
             if (!appData.setupComplete) {
