@@ -1,0 +1,48 @@
+{
+  "name": "SickleStrong — Family Sickle Cell Care",
+  "short_name": "SickleStrong",
+  "description": "Track medications, fevers, pain, and hydration for your family's sickle cell care. Built by a parent for the whole SCD community.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f0f14",
+  "theme_color": "#6c3fcf",
+  "categories": ["health", "medical", "lifestyle"],
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Log Temperature",
+      "short_name": "Temp",
+      "description": "Quickly log a temperature reading",
+      "url": "/?action=temp",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Log Pain",
+      "short_name": "Pain",
+      "description": "Log a pain episode on the body map",
+      "url": "/?action=pain",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
+}
