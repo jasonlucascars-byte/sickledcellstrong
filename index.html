@@ -6559,7 +6559,6 @@
                 weight_lbs: childData.weight || null,
                 emoji: childData.emoji || '👧🏾',
                 color: childData.color || null,
-                self_tracking: childData.selfTracking || false,
                 hydration_goal: childData.hydrationGoal || 48,
                 is_active: true
             };
@@ -6596,8 +6595,6 @@
                 family_id: familyId,
                 severity,
                 locations: entry.location ? entry.location.split(',').map(s => s.trim()).filter(Boolean) : [],
-                emoji: entry.emoji || null,
-                temperature: entry.temperature || null,
                 what_helped: entry.helped || [],
                 notes: entry.notes || null,
                 logged_at: entry.startTime || new Date().toISOString()
@@ -6765,7 +6762,6 @@
             // Create family record
             const { data: family, error: famErr } = await sb.from('families').insert({
                 family_code: familyCode,
-                name: name + "'s Family",
                 plan: 'beta'
             }).select().single();
 
