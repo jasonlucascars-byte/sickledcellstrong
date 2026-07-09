@@ -3066,7 +3066,7 @@
             // Cloud sync
             (async () => {
                 const familyId = await getCurrentFamilyId();
-                if (familyId) await pushPainLogToCloud(painEntry, child.id, familyId);
+                if (familyId) await _pushPainLog(painEntry, child.id, familyId);
             })();
             document.querySelector('.modal').remove();
             renderSymptomHistory();
@@ -3131,7 +3131,7 @@
             // Cloud sync
             (async () => {
                 const familyId = await getCurrentFamilyId();
-                if (familyId) await pushTempLogToCloud(tempEntry, child.id, familyId);
+                if (familyId) await _pushTempLog(tempEntry, child.id, familyId);
             })();
             
             // Check for fever emergency
@@ -3189,20 +3189,19 @@
             let hasEmergency = false;
             let emergencyChild = null;
             let emergencyTemp = 0;
-            
+            const toSync = [];
+
             inputs.forEach(input => {
                 const childIndex = parseInt(input.dataset.childIndex);
                 const temperature = parseFloat(input.value);
-                
+
                 if (!isNaN(temperature) && temperature >= 95 && temperature <= 106) {
                     const child = appData.children[childIndex];
                     if (!child.temperatureLog) child.temperatureLog = [];
-                    child.temperatureLog.push({
-                        id: Date.now() + childIndex,
-                        temperature: temperature,
-                        timestamp: new Date().toISOString()
-                    });
-                    
+                    const tempEntry = { id: Date.now() + childIndex, temperature, timestamp: new Date().toISOString() };
+                    child.temperatureLog.push(tempEntry);
+                    toSync.push({ entry: tempEntry, childId: child.id });
+
                     if (temperature >= 101.3) {
                         hasEmergency = true;
                         emergencyChild = child;
@@ -3210,8 +3209,11 @@
                     }
                 }
             });
-            
+
             saveData();
+            getCurrentFamilyId().then(fid => {
+                if (fid) toSync.forEach(({ entry, childId }) => cloudSync(() => _pushTempLog(entry, childId, fid)));
+            });
             document.querySelector('.modal').remove();
             
             if (hasEmergency) {
@@ -3871,12 +3873,12 @@
             (async () => {
                 const familyId = await getCurrentFamilyId();
                 if (familyId) {
-                    const saved = await pushChildToCloud(child, familyId);
+                    const saved = await _pushChild(child, familyId);
                     if (saved) {
                         child.id = saved.id; // use DB UUID
                         appData.currentChildId = saved.id;
                     }
-                    await pushMedsToCloud(child.medications, child.id, familyId);
+                    await _pushMeds(child.medications, child.id, familyId);
                 }
             })();
             
