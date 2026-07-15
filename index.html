@@ -1480,6 +1480,14 @@
                     </div>
                     <div id="weightList"></div>
                 </div>
+
+                <div class="card" id="strokeScreenCard" style="display:none;">
+                    <div class="card-header">
+                        <div class="card-title">🧠 Annual Stroke Screen (TCD)</div>
+                        <button class="btn btn-primary btn-small" onclick="showLogStrokeScreen()">+ Log</button>
+                    </div>
+                    <div id="strokeScreenContent"></div>
+                </div>
             </section>
 
             <!-- Emergency Section -->
@@ -1493,6 +1501,10 @@
                         <li style="padding: 10px 0; border-bottom: 1px solid rgba(231, 111, 81, 0.2); font-size: 14px; display: flex; align-items: flex-start; gap: 10px;">
                             <span style="color: var(--emergency); font-size: 18px;">🌡️</span>
                             <span>Fever of 101.3°F (38.5°C) or higher</span>
+                        </li>
+                        <li style="padding: 10px 0; border-bottom: 1px solid rgba(231, 111, 81, 0.2); font-size: 14px; display: flex; align-items: flex-start; gap: 10px;">
+                            <span style="color: var(--emergency); font-size: 18px;">⚡</span>
+                            <span>Sudden neurologic change, difficulty walking, or problems with strength or talking</span>
                         </li>
                         <li style="padding: 10px 0; border-bottom: 1px solid rgba(231, 111, 81, 0.2); font-size: 14px; display: flex; align-items: flex-start; gap: 10px;">
                             <span style="color: var(--emergency); font-size: 18px;">😫</span>
@@ -3367,7 +3379,7 @@
                 { id: 'paleness',    icon: '😶',  label: 'Paleness',           desc: 'Pale lips, skin, or gums' },
                 { id: 'spleen',      icon: '🫀',  label: 'Abdominal Pain',     desc: 'Stomach or spleen area' },
                 { id: 'priapism',    icon: '🚨',  label: 'Priapism',           desc: 'Painful prolonged erection (males)' },
-                { id: 'stroke',      icon: '⚡',  label: 'Stroke Signs',       desc: 'Face drooping, arm weakness, speech' },
+                { id: 'stroke',      icon: '⚡',  label: 'Stroke Signs',       desc: 'Sudden weakness, trouble walking or talking' },
                 { id: 'other',       icon: '📝',  label: 'Other',              desc: 'Not listed above' },
             ];
 
@@ -4453,6 +4465,7 @@
             document.getElementById('dailyQuote').textContent = getDailyQuote();
             renderTemperatureOverview();
             renderSymptomHistory();
+            renderStrokeScreenCard();
             updateNotificationUI();
         }
 
@@ -5646,6 +5659,120 @@
             return found ? found.icon : '📇';
         }
 
+        // ── STROKE SCREEN (TCD) ──────────────────────────────────────────
+
+        function strokeScreenApplies(child) {
+            if (!child || !child.diseaseType) return false;
+            // Brochure scope: HbSS and HbSβ0 only
+            return child.diseaseType === 'HbSS' || child.diseaseType === 'HbS-beta0';
+        }
+
+        function strokeScreenAgeValid(child) {
+            if (!child || !child.ageInMonths) return false;
+            const ageYears = child.ageInMonths / 12;
+            return ageYears >= 2 && ageYears <= 16;
+        }
+
+        function renderStrokeScreenCard() {
+            const card = document.getElementById('strokeScreenCard');
+            const content = document.getElementById('strokeScreenContent');
+            if (!card || !content) return;
+
+            const child = getCurrentChild();
+            if (!child || !strokeScreenApplies(child) || !strokeScreenAgeValid(child)) {
+                card.style.display = 'none';
+                return;
+            }
+            card.style.display = '';
+
+            const lastDate = child.lastStrokeScreen;
+            const result = child.strokeScreenResult;
+
+            let nextDueHTML = '';
+            if (lastDate && result) {
+                if (result === 'normal') {
+                    const nextDate = new Date(lastDate);
+                    nextDate.setFullYear(nextDate.getFullYear() + 1);
+                    const overdue = nextDate < new Date();
+                    const nextStr = nextDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+                    nextDueHTML = `<div style="margin-top:8px;font-size:13px;color:${overdue ? 'var(--emergency)' : 'var(--success, #2e7d32)'};">
+                        ${overdue ? '⚠️ Overdue — ' : '✅ Next due: '}${nextStr}
+                    </div>`;
+                } else if (result === 'conditional') {
+                    nextDueHTML = `<div style="margin-top:8px;font-size:13px;color:var(--warning, #b45309);">
+                        ⚠️ Conditional result — your provider will advise how often to repeat
+                    </div>`;
+                } else if (result === 'abnormal') {
+                    nextDueHTML = `<div style="margin-top:8px;font-size:13px;color:var(--emergency);">
+                        🚨 Abnormal result — repeat within 1–2 weeks. Contact your hematologist immediately.
+                    </div>`;
+                }
+            }
+
+            content.innerHTML = `
+                <div style="padding:12px 0 4px;">
+                    <div style="font-size:13px;color:var(--text-light);margin-bottom:4px;">
+                        Transcranial Doppler ultrasound — recommended annually, ages 2–16, for HbSS / HbSβ0
+                    </div>
+                    <div style="font-size:14px;margin-top:8px;">
+                        <strong>Last screen:</strong> ${lastDate ? new Date(lastDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'Not recorded'}
+                    </div>
+                    ${result ? `<div style="font-size:14px;margin-top:4px;"><strong>Result:</strong> ${result.charAt(0).toUpperCase() + result.slice(1)}</div>` : ''}
+                    ${nextDueHTML}
+                </div>`;
+        }
+
+        function showLogStrokeScreen() {
+            const child = getCurrentChild();
+            if (!child) return;
+
+            const modal = document.createElement('div');
+            modal.className = 'modal active';
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width:400px;">
+                    <div style="background:linear-gradient(135deg,var(--primary),var(--purple));padding:20px;border-radius:20px 20px 0 0;margin:-20px -20px 20px;">
+                        <button class="modal-close" onclick="this.closest('.modal').remove()" style="color:white;">×</button>
+                        <div style="color:white;font-size:18px;font-weight:800;">🧠 Log Stroke Screen</div>
+                        <div style="color:rgba(255,255,255,0.75);font-size:12px;margin-top:4px;">Transcranial Doppler (TCD) ultrasound</div>
+                    </div>
+                    <div class="input-group">
+                        <label class="input-label">Date of Screen</label>
+                        <input type="date" class="input-field" id="strokeScreenDate" value="${new Date().toISOString().split('T')[0]}" max="${new Date().toISOString().split('T')[0]}">
+                    </div>
+                    <div class="input-group">
+                        <label class="input-label">Result</label>
+                        <select class="input-field" id="strokeScreenResult">
+                            <option value="">Select result…</option>
+                            <option value="normal">Normal — repeat in 1 year</option>
+                            <option value="conditional">Conditional — provider will advise frequency</option>
+                            <option value="abnormal">Abnormal — repeat within 1–2 weeks</option>
+                        </select>
+                    </div>
+                    <button class="btn btn-primary btn-full" onclick="saveStrokeScreen()">Save</button>
+                </div>`;
+            document.body.appendChild(modal);
+        }
+
+        function saveStrokeScreen() {
+            const date = document.getElementById('strokeScreenDate').value;
+            const result = document.getElementById('strokeScreenResult').value;
+            if (!date) { alert('Please enter the screen date.'); return; }
+            if (!result) { alert('Please select the result.'); return; }
+
+            const child = getCurrentChild();
+            child.lastStrokeScreen = date;
+            child.strokeScreenResult = result;
+            saveData();
+
+            getCurrentFamilyId().then(fid => {
+                if (fid) cloudSync(() => _pushChild(child, fid));
+            });
+
+            document.querySelector('.modal.active')?.remove();
+            renderStrokeScreenCard();
+            setTimeout(() => alert('✅ Stroke screen logged.'), 100);
+        }
+
         function showAddContact(editId = null) {
             const existing = editId ? appData.contacts.find(c => c.id === editId) : null;
 
@@ -6461,6 +6588,8 @@
                         selfTracking: c.self_tracking,
                         hydrationGoal: c.hydration_goal || 48,
                         daysPainFree: c.days_pain_free || 0,
+                        lastStrokeScreen: c.last_stroke_screen || null,
+                        strokeScreenResult: c.stroke_screen_result || null,
                         waterIntake: 0,
                         todayMeds: 0,
                         medications: childMeds.map(m => ({
@@ -6560,7 +6689,9 @@
                 emoji: childData.emoji || '👧🏾',
                 color: childData.color || null,
                 hydration_goal: childData.hydrationGoal || 48,
-                is_active: true
+                is_active: true,
+                last_stroke_screen: childData.lastStrokeScreen || null,
+                stroke_screen_result: childData.strokeScreenResult || null
             };
             if (isUUID) payload.id = childData.id;
             const { data } = await sb.from('children').upsert(payload, { onConflict: 'id' }).select().single();
