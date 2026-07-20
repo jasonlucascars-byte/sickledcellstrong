@@ -1346,7 +1346,10 @@
                             </div>
                             <div style="font-size:12px;color:var(--text-light);margin-top:3px;">Last 90 days · PDF ready to share</div>
                         </div>
-                        <button class="btn btn-primary btn-small" onclick="showDoctorReport()">Generate</button>
+                        <div style="display:flex;gap:8px;">
+                            <button class="btn btn-secondary btn-small" onclick="showSchoolCareSheet()">School Care Sheet</button>
+                            <button class="btn btn-primary btn-small" onclick="showDoctorReport()">Generate</button>
+                        </div>
                     </div>
                     <div style="display:flex;gap:8px;flex-wrap:wrap;">
                         <span style="font-size:11px;background:white;border-radius:20px;padding:3px 10px;color:var(--primary);font-weight:600;border:1px solid var(--primary);">Pain Episodes</span>
@@ -6500,6 +6503,246 @@
             URL.revokeObjectURL(url);
             trackDoctorReportGenerated();
             setTimeout(() => alert('✅ Report downloaded! Open in any text editor or print directly.'), 100);
+        }
+
+        // ── SCHOOL CARE SHEET ─────────────────────────────────────────────
+        // A one-page action plan for a school nurse/teacher — what to DO,
+        // not a medical history. Deliberately excludes pain/temp history,
+        // notes, refill/pharmacy/prescriber details, and sibling data.
+
+        // A med "applies during school hours" if any scheduled time falls
+        // roughly within 8am–3pm.
+        function _medDuringSchoolHours(med) {
+            const times = Array.isArray(med.times) ? med.times : (med.time ? [med.time] : []);
+            return times.some(t => {
+                const m = /^(\d{1,2}):(\d{2})/.exec(String(t).trim());
+                if (!m) return false;
+                const hour = parseInt(m[1], 10);
+                return hour >= 8 && hour < 15;
+            });
+        }
+
+        // Contacts relevant to a school day: medical-group types, plus any
+        // contact the parent marked primary. Excludes Friend/Neighbor/etc.
+        function _schoolRelevantContacts() {
+            const contacts = appData.contacts || [];
+            const medicalTypes = contactTypes.filter(t => t.group === 'medical').map(t => t.id);
+            return contacts.filter(c => medicalTypes.includes(c.type) || c.isPrimary);
+        }
+
+        function showSchoolCareSheet() {
+            const child = getCurrentChild();
+            if (!child) return;
+
+            const meds = child.medications || [];
+            const contacts = _schoolRelevantContacts();
+            const now = new Date();
+            const sheetDate = now.toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+
+            const modal = document.createElement('div');
+            modal.className = 'modal active';
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width:520px;padding:0;overflow:hidden;">
+
+                    <!-- Modal Header -->
+                    <div style="background:linear-gradient(135deg,#0f0f14,#1e1040);padding:20px 24px;display:flex;justify-content:space-between;align-items:center;">
+                        <div>
+                            <div style="color:rgba(14,168,154,0.8);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;">SickleStrong</div>
+                            <div style="color:white;font-size:18px;font-weight:800;font-family:'Sora',sans-serif;">School Care Sheet</div>
+                            <div style="color:rgba(255,255,255,0.5);font-size:12px;margin-top:2px;">For school nurse / teacher · ${sheetDate}</div>
+                        </div>
+                        <button class="modal-close" onclick="this.closest('.modal').remove()" style="color:white;background:rgba(255,255,255,0.1);">×</button>
+                    </div>
+
+                    <div style="padding:20px;max-height:65vh;overflow-y:auto;">
+
+                        <!-- 1. Child Identification -->
+                        <div class="report-section-title">Student</div>
+                        <div class="report-row">
+                            <span class="report-label">Name</span>
+                            <span class="report-value">${child.name}</span>
+                        </div>
+                        <div class="report-row">
+                            <span class="report-label">Date of Birth</span>
+                            <span class="report-value">${child.birthDate ? new Date(child.birthDate).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}) : 'Not provided'}</span>
+                        </div>
+                        <div class="report-row">
+                            <span class="report-label">Age</span>
+                            <span class="report-value">${child.displayAge || 'Not provided'}</span>
+                        </div>
+                        <div class="report-row">
+                            <span class="report-label">Condition</span>
+                            <span class="report-value">${child.diseaseType || 'Not specified'} (Sickle Cell Disease)</span>
+                        </div>
+                        <div class="report-row">
+                            <span class="report-label">Weight</span>
+                            <span class="report-value">${child.weight ? child.weight + ' lbs' : 'Not recorded'}</span>
+                        </div>
+
+                        <!-- 2. Emergency Action Plan -->
+                        <div class="report-section-title" style="color:var(--emergency);">Emergency Action Plan</div>
+                        <div style="background:var(--emergency-light,#FFE9E6);border:1.5px solid var(--emergency);border-radius:12px;padding:14px;margin-bottom:14px;">
+                            <div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid rgba(231,111,81,0.2);font-size:13px;">
+                                <span style="font-size:16px;">🌡️</span>
+                                <span><strong>Fever ≥ 101.3°F</strong> → Call parent immediately</span>
+                            </div>
+                            <div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid rgba(231,111,81,0.2);font-size:13px;">
+                                <span style="font-size:16px;">🚨</span>
+                                <span><strong>Fever ≥ 104°F, OR sudden neurologic change, difficulty walking, or problems with strength or talking</strong> → Call 911 immediately, then call parent</span>
+                            </div>
+                            <div style="display:flex;gap:10px;padding:8px 0;font-size:13px;">
+                                <span style="font-size:16px;">😫</span>
+                                <span><strong>Severe pain unrelieved by usual measures</strong> → Call parent</span>
+                            </div>
+                        </div>
+
+                        <!-- 3. Medications -->
+                        <div class="report-section-title">Medications</div>
+                        ${meds.length === 0
+                            ? `<div style="font-size:13px;color:var(--text-light);padding:8px 0;">No medications on file.</div>`
+                            : meds.map(med => {
+                                const schoolHours = _medDuringSchoolHours(med);
+                                const times = Array.isArray(med.times) ? med.times.join(', ') : (med.time || 'As prescribed');
+                                return `
+                                <div class="report-row">
+                                    <div>
+                                        <div style="font-weight:700;font-size:13px;font-family:'Sora',sans-serif;">${med.name}</div>
+                                        <div style="font-size:11px;color:var(--text-light);">${med.dose || ''} · ${times}</div>
+                                    </div>
+                                    ${schoolHours
+                                        ? `<span style="font-size:11px;background:var(--warning-light,#FFF4E0);color:var(--warning,#b45309);padding:3px 9px;border-radius:20px;font-weight:700;white-space:nowrap;">⏰ During school hours</span>`
+                                        : `<span style="font-size:11px;color:var(--text-light);white-space:nowrap;">Outside school hours</span>`}
+                                </div>`;
+                            }).join('')
+                        }
+
+                        <!-- 4. Hydration -->
+                        <div class="report-section-title">Hydration</div>
+                        <div style="font-size:13px;padding:8px 0;color:var(--text-mid);">
+                            💧 Please allow water access throughout the day — goal: ${child.hydrationGoal || 48} oz/day.
+                        </div>
+
+                        <!-- 5. Stroke Screen (if applicable) — same gating as Health-tab tracker -->
+                        ${(strokeScreenApplies(child) && strokeScreenAgeValid(child)) ? `
+                        <div class="report-section-title">Stroke Screening</div>
+                        <div style="font-size:13px;padding:8px 0;color:var(--text-mid);">
+                            🧠 This student is on an annual transcranial Doppler (TCD) stroke-screening protocol as part of their sickle cell care.
+                        </div>` : ''}
+
+                        <!-- 6. Emergency Contacts -->
+                        <div class="report-section-title">Emergency Contacts</div>
+                        ${contacts.length === 0
+                            ? `<div style="font-size:13px;color:var(--text-light);padding:8px 0;">No medical or primary contacts on file.</div>`
+                            : contacts.map(c => `
+                                <div class="report-row">
+                                    <div>
+                                        <div style="font-weight:700;font-size:13px;font-family:'Sora',sans-serif;">${c.name}${c.isPrimary ? ' ⭐' : ''}</div>
+                                        <div style="font-size:11px;color:var(--text-light);">${c.type || 'Contact'}</div>
+                                    </div>
+                                    <div style="text-align:right;font-size:12px;color:var(--text-mid);">${c.phone || ''}</div>
+                                </div>
+                            `).join('')
+                        }
+
+                        <!-- 7. Footer -->
+                        <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border);font-size:11px;color:var(--text-light);line-height:1.5;">
+                            Generated by SickleStrong · ${sheetDate}<br>
+                            This is not a substitute for medical advice — contact the child's care team with questions.
+                        </div>
+                    </div>
+
+                    <!-- Actions -->
+                    <div style="padding:16px 20px;border-top:1px solid var(--border);display:flex;gap:10px;background:white;">
+                        <button class="btn btn-secondary" style="flex:1;" onclick="printSchoolCareSheet()">🖨️ Print</button>
+                        <button class="btn btn-primary" style="flex:1;" onclick="downloadSchoolCareSheet()">📥 Download</button>
+                        <button class="modal-close" onclick="this.closest('.modal').remove()" style="position:static;width:auto;height:auto;background:var(--bg);border:1.5px solid var(--border);border-radius:10px;padding:0 14px;font-size:18px;cursor:pointer;color:var(--text-light);">×</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        function printSchoolCareSheet() {
+            window.print();
+        }
+
+        function downloadSchoolCareSheet() {
+            const child = getCurrentChild();
+            if (!child) return;
+
+            const meds = child.medications || [];
+            const contacts = _schoolRelevantContacts();
+            const now = new Date();
+            const sheetDate = now.toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' });
+
+            const lines = [
+                '═══════════════════════════════════════════',
+                '         SICKLESTRONG SCHOOL CARE SHEET',
+                '═══════════════════════════════════════════',
+                '',
+                `Generated: ${sheetDate}`,
+                'For: School nurse / teacher',
+                '',
+                '── STUDENT ──────────────────────────────',
+                `Name:      ${child.name}`,
+                `DOB:       ${child.birthDate ? new Date(child.birthDate).toLocaleDateString() : 'Not provided'}`,
+                `Age:       ${child.displayAge || 'Not provided'}`,
+                `Condition: ${child.diseaseType || 'Not specified'} (Sickle Cell Disease)`,
+                `Weight:    ${child.weight ? child.weight + ' lbs' : 'Not recorded'}`,
+                '',
+                '── EMERGENCY ACTION PLAN ─────────────────',
+                '  Fever >= 101.3°F',
+                '     -> Call parent immediately',
+                '',
+                '  Fever >= 104°F, OR sudden neurologic change,',
+                '  difficulty walking, or problems with strength',
+                '  or talking',
+                '     -> Call 911 immediately, then call parent',
+                '',
+                '  Severe pain unrelieved by usual measures',
+                '     -> Call parent',
+                '',
+                '── MEDICATIONS ──────────────────────────',
+                ...(meds.length > 0
+                    ? meds.map(m => {
+                        const times = Array.isArray(m.times) ? m.times.join(', ') : (m.time || 'As prescribed');
+                        const flag = _medDuringSchoolHours(m) ? '  [NEEDED DURING SCHOOL HOURS]' : '';
+                        return `  ${m.name} | ${m.dose || ''} | ${times}${flag}`;
+                    })
+                    : ['  No medications on file.']),
+                '',
+                '── HYDRATION ────────────────────────────',
+                `  Please allow water access throughout the day.`,
+                `  Goal: ${child.hydrationGoal || 48} oz/day.`,
+                '',
+                ...((strokeScreenApplies(child) && strokeScreenAgeValid(child)) ? [
+                    '── STROKE SCREENING ─────────────────────',
+                    '  This student is on an annual transcranial',
+                    '  Doppler (TCD) stroke-screening protocol as',
+                    '  part of their sickle cell care.',
+                    '',
+                ] : []),
+                '── EMERGENCY CONTACTS ───────────────────',
+                ...(contacts.length > 0
+                    ? contacts.map(c => `  ${c.name}${c.isPrimary ? ' (PRIMARY)' : ''} | ${c.type || 'Contact'} | ${c.phone || ''}`)
+                    : ['  No medical or primary contacts on file.']),
+                '',
+                '═══════════════════════════════════════════',
+                `  Generated by SickleStrong · ${sheetDate}`,
+                '  This is not a substitute for medical advice —',
+                '  contact the child\'s care team with questions.',
+                '═══════════════════════════════════════════',
+            ];
+
+            const content = lines.join('\n');
+            const blob = new Blob([content], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `sicklestrong-school-care-sheet-${child.name.toLowerCase().replace(/\s/g,'-')}-${now.toISOString().split('T')[0]}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+            setTimeout(() => alert('✅ School care sheet downloaded! Open in any text editor or print directly.'), 100);
         }
 
         // ── SUPABASE INIT ─────────────────────────────────────────────────
