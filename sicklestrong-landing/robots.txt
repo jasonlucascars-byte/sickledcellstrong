@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+
+# Netlify Functions are an API, not pages to index.
+Disallow: /.netlify/functions/
+Disallow: /api/
+
+# Replace with your production domain before launch.
+Sitemap: https://sicklestrong-landing-v2.netlify.app/sitemap.xml

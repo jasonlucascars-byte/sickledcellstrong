@@ -1,0 +1,48 @@
+# Netlify configuration for the SickleStrong founding-beta landing page.
+
+[build]
+  publish = "."
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+
+# Friendly aliases (optional). The front-end calls /.netlify/functions/*
+# directly, but these let you use /api/* if you prefer.
+[[redirects]]
+  from = "/api/beta-signup"
+  to = "/.netlify/functions/beta-signup"
+  status = 200
+[[redirects]]
+  from = "/api/beta-count"
+  to = "/.netlify/functions/beta-count"
+  status = 200
+
+# ---------------------------------------------------------------------------
+# Security headers + Content Security Policy.
+#
+# The CSP below is STRICT and self-contained: all scripts/styles/images are
+# served from this origin, and the only network call the page makes is the
+# same-origin form POST (connect-src 'self'), so no secret is ever exposed.
+#
+# IF YOU ADD ANALYTICS (Plausible, GA4, …) you MUST widen the CSP:
+#   Plausible → add https://plausible.io to script-src and connect-src
+#   GA4       → add https://www.googletagmanager.com to script-src and
+#               https://www.google-analytics.com to connect-src
+# Keep 'self' and never add 'unsafe-eval'.
+# ---------------------------------------------------------------------------
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), interest-cohort=()"
+    Content-Security-Policy = "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; font-src 'self'; manifest-src 'self'"
+
+# Long-cache immutable static assets (safe because filenames are stable;
+# bump a ?v= query or filename when you change them).
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=86400"

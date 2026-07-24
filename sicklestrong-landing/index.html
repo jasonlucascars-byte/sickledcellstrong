@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SickleStrong — One clear place for your family's sickle cell care</title>
+  <meta name="description" content="Track medications, hydration, pain, temperature, symptoms, and appointments for one child, multiple children, or yourself. Join the SickleStrong founding beta — built by a father of two sons with sickle cell disease." />
+
+  <!-- Canonical URL — REPLACE with your production domain before launch. -->
+  <link rel="canonical" href="https://sicklestrong-landing-v2.netlify.app/" />
+
+  <!-- Theme color matches the SickleStrong app identity. -->
+  <meta name="theme-color" content="#6C3FCF" />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="SickleStrong" />
+  <meta property="og:title" content="One clear place for your family's sickle cell care" />
+  <meta property="og:description" content="Join the SickleStrong founding beta — track medications, hydration, pain, temperature, symptoms, and appointments for your whole family. Built by an SCD father." />
+  <meta property="og:url" content="https://sicklestrong-landing-v2.netlify.app/" />
+  <!-- Social sharing image — PLACEHOLDER. See assets/img/og-image.svg and the
+       README "Replacing the social-sharing image" section to export a real
+       1200×630 PNG and update this URL to an absolute production URL. -->
+  <meta property="og:image" content="https://sicklestrong-landing-v2.netlify.app/assets/img/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="SickleStrong — one clear place for your family's sickle cell care" />
+
+  <!-- Twitter -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="One clear place for your family's sickle cell care" />
+  <meta name="twitter:description" content="Join the SickleStrong founding beta — organized sickle cell care for your whole family. Built by an SCD father." />
+  <meta name="twitter:image" content="https://sicklestrong-landing-v2.netlify.app/assets/img/og-image.png" />
+
+  <!-- Favicons / PWA icons (reused from the SickleStrong app) -->
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="assets/img/icon-192.png" sizes="192x192" type="image/png" />
+  <link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png" />
+  <link rel="manifest" href="assets/manifest.webmanifest" />
+
+  <link rel="stylesheet" href="assets/css/styles.css" />
+  <!-- Sets the saved theme before first paint (no flash). -->
+  <script src="assets/js/theme.js"></script>
+</head>
+<body>
+  <a class="skip" href="#hero">Skip to content</a>
+
+  <header class="site" id="top">
+    <div class="wrap nav">
+      <a class="brand" href="#top" aria-label="SickleStrong home">
+        <span class="mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.5-9.2-8.3A5.2 5.2 0 0 1 12 6.5a5.2 5.2 0 0 1 9.2 6.2C19 16.5 12 21 12 21Z"/></svg>
+        </span>
+        SickleStrong
+      </a>
+      <nav class="nav-links" aria-label="Primary">
+        <a href="#demo">How It Works</a>
+        <a href="#features">What You Can Track</a>
+        <a href="#founder-story">Our Story</a>
+        <a href="#faq">FAQ</a>
+        <a href="https://sicklestrong-v2.netlify.app/" target="_blank" rel="noopener noreferrer" data-ev="app_open">Open App</a>
+      </nav>
+      <div class="nav-cta">
+        <button type="button" class="theme-toggle" aria-label="Switch color theme">
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+        </button>
+        <a class="btn btn-primary" href="#join" data-ev="beta_cta_click" data-cta-beta data-label-default="Join Beta">Join Beta</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- ============ HERO ============ -->
+    <section id="hero">
+      <div class="wrap hero-grid">
+        <div class="hero-copy">
+          <span class="eyebrow">Founding beta now open</span>
+          <h1>One clear place for your family's sickle cell care.</h1>
+          <p class="lead">Track medications, hydration, pain, temperature, symptoms, appointments, and care notes — for one child, multiple children, or yourself. SickleStrong helps turn everyday details into a more organized record for your family and care team.</p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="#join" data-ev="beta_cta_click" data-cta-beta data-label-default="Join the Founding Beta">Join the Founding Beta</a>
+            <a class="btn btn-secondary" href="#demo" data-ev="demo_open">See How It Works</a>
+          </div>
+          <p class="trust-line">
+            <span class="ribbon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 9l6 10M15 9L9 19M12 3a3 3 0 0 1 0 6 3 3 0 0 1 0-6Z"/></svg>Built by an SCD father</span>
+            <span class="dot" aria-hidden="true"></span>
+            <span>No credit card</span><span class="dot" aria-hidden="true"></span>
+            <span>Lifetime access for founding families</span>
+          </p>
+        </div>
+
+        <!-- Faithful product preview with clearly-labelled synthetic data -->
+        <div class="device reveal" role="img" aria-label="Preview of the SickleStrong dashboard showing two family profiles, medications due today, latest temperature, and hydration progress. Sample data.">
+          <div class="device-bar">
+            <span class="app"><span class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.5-9.2-8.3A5.2 5.2 0 0 1 12 6.5a5.2 5.2 0 0 1 9.2 6.2C19 16.5 12 21 12 21Z"/></svg></span>Today</span>
+            <span class="sample-tag">Sample data</span>
+          </div>
+          <div class="profiles">
+            <div class="profile active"><span class="av a" aria-hidden="true">AM</span><span class="who"><b>Amir</b><span>Age 9 · parent-led</span></span></div>
+            <div class="profile"><span class="av b" aria-hidden="true">JR</span><span class="who"><b>Jordan</b><span>Age 15 · self-managed</span></span></div>
+          </div>
+          <div class="meds">
+            <h4>Medications due today</h4>
+            <div class="med done"><span class="box" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="name">Hydroxyurea</span><span class="time">8:00 AM</span></div>
+            <div class="med done"><span class="box" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="name">Folic acid</span><span class="time">8:00 AM</span></div>
+            <div class="med"><span class="box" aria-hidden="true"></span><span class="name">Penicillin</span><span class="time">8:00 PM</span></div>
+          </div>
+          <div class="card-row">
+            <div class="mini"><div class="k">Latest temp</div><div class="v">98.9<small>°F</small></div><span class="chip good">Normal range</span></div>
+            <div class="mini"><div class="k">Hydration</div><div class="v">5<small> / 8 cups</small></div><span class="chip info">On track</span></div>
+          </div>
+          <a class="btn btn-primary btn-block" href="#join" data-ev="beta_cta_click">Create Care Summary</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ PRODUCT PROOF ============ -->
+    <section id="product-proof">
+      <div class="wrap">
+        <p class="proof-head reveal">Daily tracking that becomes useful when it matters.</p>
+        <div class="proof-grid reveal">
+          <div class="proof"><span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16.5 5.2a3.2 3.2 0 0 1 0 5.6"/><path d="M18 20a6.5 6.5 0 0 0-3-5.5"/></svg></span><b>Multiple family profiles</b></div>
+          <div class="proof"><span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l2 6 4-14 2 8h6"/></svg></span><b>Pain &amp; symptom history</b></div>
+          <div class="proof"><span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3s5.5 5.6 5.5 9.5A5.5 5.5 0 0 1 6.5 12.5C6.5 8.6 12 3 12 3Z"/></svg></span><b>Medication &amp; hydration tracking</b></div>
+          <div class="proof"><span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-3"/><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M8 11h8M8 15h5"/></svg></span><b>Care summaries for appointments</b></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ DEMO (read-only, in-page, sample data) ============ -->
+    <section id="demo">
+      <div class="wrap demo-grid">
+        <div class="demo-copy reveal">
+          <span class="eyebrow">Interactive demo · sample data</span>
+          <h2 style="font-size:clamp(1.85rem,3.4vw,2.6rem);margin-top:.5rem;">See how SickleStrong works — before you sign up.</h2>
+          <p class="lead">This is a read-only preview built from synthetic data. Switch between two example profiles and explore what a real day looks like. No account or personal details required.</p>
+          <ul>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Switch between <strong>Amir</strong> and <strong>Jordan</strong></li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>See medication and hydration status</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Review pain &amp; symptom history</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Open a care-summary preview</li>
+          </ul>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="#join" data-ev="beta_cta_click" data-cta-beta data-label-default="Join the Founding Beta">Join the Founding Beta</a>
+            <a class="btn btn-secondary" href="https://sicklestrong-v2.netlify.app/" target="_blank" rel="noopener noreferrer" data-ev="app_open">Open SickleStrong</a>
+          </div>
+        </div>
+
+        <div class="device demo-device reveal">
+          <div class="device-bar">
+            <span class="app"><span class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.5-9.2-8.3A5.2 5.2 0 0 1 12 6.5a5.2 5.2 0 0 1 9.2 6.2C19 16.5 12 21 12 21Z"/></svg></span>Family view</span>
+            <span class="sample-tag">Sample data</span>
+          </div>
+
+          <div class="tablist" role="tablist" aria-label="Choose a sample profile">
+            <button class="tab" role="tab" id="tab-amir" aria-selected="true" aria-controls="panel-amir"><span class="av a" aria-hidden="true">AM</span>Amir · 9</button>
+            <button class="tab" role="tab" id="tab-jordan" aria-selected="false" aria-controls="panel-jordan"><span class="av b" aria-hidden="true">JR</span>Jordan · 15</button>
+          </div>
+
+          <!-- Amir -->
+          <div class="tabpanel" id="panel-amir" role="tabpanel" aria-labelledby="tab-amir" tabindex="0">
+            <div class="demo-block">
+              <h4>Medications &amp; hydration today</h4>
+              <div class="meds">
+                <div class="med done"><span class="box" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="name">Hydroxyurea</span><span class="time">8:00 AM</span></div>
+                <div class="med done"><span class="box" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="name">Folic acid</span><span class="time">8:00 AM</span></div>
+                <div class="med"><span class="box" aria-hidden="true"></span><span class="name">Penicillin</span><span class="time">8:00 PM</span></div>
+              </div>
+              <div class="card-row">
+                <div class="mini"><div class="k">Latest temp</div><div class="v">98.9<small>°F</small></div><span class="chip good">Normal</span></div>
+                <div class="mini"><div class="k">Hydration</div><div class="v">5<small> / 8</small></div><span class="chip info">On track</span></div>
+              </div>
+            </div>
+            <div class="demo-block">
+              <h4>Pain &amp; symptom history</h4>
+              <div class="history">
+                <div class="hrow"><span class="when">Jul 2</span><span>Knees · 45 min · rest + fluids helped</span><span class="sev low">Mild</span></div>
+                <div class="hrow"><span class="when">Jun 24</span><span>Lower back · after school</span><span class="sev mid">Moderate</span></div>
+                <div class="hrow"><span class="when">Jun 11</span><span>Fatigue · rest day logged</span><span class="sev low">Mild</span></div>
+              </div>
+            </div>
+            <div class="demo-block">
+              <h4>Care summary preview</h4>
+              <div class="summary-card">
+                <div class="sc-head"><b>Amir · last 30 days</b><span class="sample-tag">Sample</span></div>
+                <ul class="summary-list">
+                  <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>3 pain episodes logged — knees most frequent</li>
+                  <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Hydroxyurea taken 28 of 30 days</li>
+                  <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>No fever events at or above 101.3°F</li>
+                </ul>
+              </div>
+            </div>
+            <p class="demo-note">Read-only preview · your real data stays private to your account.</p>
+          </div>
+
+          <!-- Jordan -->
+          <div class="tabpanel" id="panel-jordan" role="tabpanel" aria-labelledby="tab-jordan" tabindex="0">
+            <div class="demo-block">
+              <h4>Medications &amp; hydration today</h4>
+              <div class="meds">
+                <div class="med done"><span class="box" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span><span class="name">Hydroxyurea</span><span class="time">7:30 AM</span></div>
+                <div class="med"><span class="box" aria-hidden="true"></span><span class="name">Folic acid</span><span class="time">7:30 PM</span></div>
+              </div>
+              <div class="card-row">
+                <div class="mini"><div class="k">Latest temp</div><div class="v">99.4<small>°F</small></div><span class="chip good">Normal</span></div>
+                <div class="mini"><div class="k">Hydration</div><div class="v">7<small> / 10</small></div><span class="chip info">On track</span></div>
+              </div>
+            </div>
+            <div class="demo-block">
+              <h4>Pain &amp; symptom history</h4>
+              <div class="history">
+                <div class="hrow"><span class="when">Jul 5</span><span>Shoulder · during practice</span><span class="sev mid">Moderate</span></div>
+                <div class="hrow"><span class="when">Jun 28</span><span>Chest tightness · rested, improved</span><span class="sev high">Severe</span></div>
+                <div class="hrow"><span class="when">Jun 15</span><span>Legs · self-logged after game</span><span class="sev low">Mild</span></div>
+              </div>
+            </div>
+            <div class="demo-block">
+              <h4>Care summary preview</h4>
+              <div class="summary-card">
+                <div class="sc-head"><b>Jordan · last 30 days</b><span class="sample-tag">Sample</span></div>
+                <ul class="summary-list">
+                  <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Self-managing daily medication log</li>
+                  <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>1 severe episode flagged for the care team</li>
+                  <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Hydration goal met on 22 of 30 days</li>
+                </ul>
+              </div>
+            </div>
+            <p class="demo-note">Read-only preview · your real data stays private to your account.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ OUTCOMES ============ -->
+    <section id="outcomes">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <span class="eyebrow">Why SickleStrong</span>
+          <h2>Less searching. Better recall. More prepared conversations.</h2>
+        </div>
+        <div class="cards c3">
+          <article class="card reveal">
+            <span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v16"/></svg></span>
+            <h3>Keep the day organized</h3>
+            <p>Put medications, hydration, temperatures, symptoms, and notes in one place instead of spreading them across notebooks, texts, calendars, and memory.</p>
+          </article>
+          <article class="card reveal">
+            <span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 15l3.5-4 3 2.5L21 7"/></svg></span>
+            <h3>Notice patterns over time</h3>
+            <p>Review pain locations, severity, fever events, medication history, and what helped so important details are easier to recall.</p>
+          </article>
+          <article class="card reveal">
+            <span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M9 13h6M9 17h4"/></svg></span>
+            <h3>Walk into appointments prepared</h3>
+            <p>Turn daily entries into a clear care summary you can review with your child's care team or use for your own appointments.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ FEATURES ============ -->
+    <section id="features">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <span class="eyebrow">Built around real SCD care</span>
+          <h2>The important details — together.</h2>
+        </div>
+        <div class="cards c2">
+          <article class="card reveal">
+            <span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M7 8V6a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v2M12 12v4M10 14h4"/></svg></span>
+            <h3>Daily care</h3>
+            <p>Track medications, doses, hydration, temperature, symptoms, and notes for each profile.</p>
+          </article>
+          <article class="card reveal">
+            <span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2.4"/><path d="M12 7.4V15M12 10l-4 2M12 10l4 2M9 21l3-6 3 6"/></svg></span>
+            <h3>Pain tracking</h3>
+            <p>Record pain location, severity, duration, and what helped using a front-and-back body map.</p>
+          </article>
+          <article class="card reveal">
+            <span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6M8 13h8M8 17h5"/></svg></span>
+            <h3>Care summaries</h3>
+            <p>Review recent activity and create an organized summary for appointments and care conversations.</p>
+          </article>
+          <article class="card reveal">
+            <span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="9" r="2.6"/><circle cx="17" cy="7" r="2.2"/><path d="M2.5 19a5.5 5.5 0 0 1 11 0M14.5 18a5 5 0 0 1 7 1"/></svg></span>
+            <h3>Family profiles</h3>
+            <p>Manage care for one child, multiple children, or yourself without mixing one person's history with another's.</p>
+          </article>
+          <article class="card reveal">
+            <span class="tag">Beta</span>
+            <span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3.1a4 4 0 0 1 0 7.75M22 21v-2a4 4 0 0 0-3-3.85M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8ZM15 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"/></svg></span>
+            <h3>Caregiver sharing</h3>
+            <p>Invite approved parents or caregivers to the same family account. Multi-device sync is being tested during the founding beta.</p>
+          </article>
+          <article class="card reveal">
+            <span class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.6 2.5 17a2 2 0 0 0 1.7 3h15.6a2 2 0 0 0 1.7-3L13.7 3.6a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg></span>
+            <h3>Urgent-care reminder</h3>
+            <p>A logged temperature of 101.3°F or higher triggers a prominent reminder to follow your care team's instructions and seek urgent evaluation.</p>
+          </article>
+        </div>
+
+        <div class="safety-note reveal">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="M9 12l2 2 4-4"/></svg>
+          <p><strong>SickleStrong helps organize information.</strong> It does not diagnose, treat, or replace your hematologist, medical team, or emergency services.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ HOW IT WORKS ============ -->
+    <section id="how-it-works">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <span class="eyebrow">How it works</span>
+          <h2>Start in minutes. Build a clearer care history over time.</h2>
+        </div>
+        <div class="steps">
+          <div class="step reveal"><span class="n" aria-hidden="true"></span><h3>Join the beta</h3><p>Reserve a founding-family spot with your name and email.</p></div>
+          <div class="step reveal"><span class="n" aria-hidden="true"></span><h3>Create the right profiles</h3><p>Add a child, multiple children, or a self-managed teen or adult profile.</p></div>
+          <div class="step reveal"><span class="n" aria-hidden="true"></span><h3>Track what matters</h3><p>Record daily care, symptoms, pain, temperatures, and notes as they happen.</p></div>
+          <div class="step reveal"><span class="n" aria-hidden="true"></span><h3>Bring the history forward</h3><p>Review patterns and prepare a care summary before appointments.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ FOUNDER STORY ============ -->
+    <section id="founder-story">
+      <div class="wrap founder-grid">
+        <aside class="founder-card reveal">
+          <div class="founder-portrait" aria-hidden="true">JL</div>
+          <div class="name">Jason Lucas</div>
+          <div class="role"><span class="ribbon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 9l6 10M15 9L9 19M12 3a3 3 0 0 1 0 6 3 3 0 0 1 0-6Z"/></svg></span>Founder · father of two sons with SCD</div>
+          <blockquote class="community">
+            <p>"Hello, my name is Courtney and my son Kyson has sickle cell anemia (SS). Looking forward to getting acquainted with the SickleStrong app. This will be a game changer for families."</p>
+            <footer>Courtney · Founding beta community member</footer>
+          </blockquote>
+        </aside>
+        <div class="founder-prose reveal">
+          <span class="eyebrow">Built from lived experience</span>
+          <h2>I needed one place for two sons at two different stages of care.</h2>
+          <p>I'm Jason Lucas, the father of two sons living with sickle cell disease. One was learning to manage more of his own health while the other still needed daily parent-led care. Their medications, symptoms, appointments, and needs were different — but the responsibility to remember everything was the same.</p>
+          <p>SickleStrong began as the tool I wished our family already had: <span class="em">one organized place for the daily details, a clearer record for doctor visits, and support for families caring for more than one person.</span></p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="#join" data-ev="beta_cta_click">Help Shape SickleStrong</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ COMMUNITY ============ -->
+    <section id="community">
+      <div class="wrap">
+        <div class="reveal">
+          <span class="eyebrow">Community</span>
+          <h2>The app helps organize care. The community helps families feel less alone.</h2>
+          <p class="lead">Founding beta families can join our private Facebook community to share feedback, ask questions, connect with other families, and help guide what SickleStrong builds next.</p>
+          <div class="hero-actions">
+            <a class="btn btn-ghost" href="https://www.facebook.com/groups/1343740994540360" target="_blank" rel="noopener noreferrer" data-ev="facebook_group_click">Join the Private Community</a>
+          </div>
+          <p class="note">Community conversations are peer support, not medical advice. Contact your care team for medical decisions and emergency guidance.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ DATA SAFETY ============ -->
+    <section id="data-safety">
+      <div class="wrap safety-grid">
+        <div class="reveal">
+          <span class="eyebrow">Data safety</span>
+          <h2 style="font-size:clamp(1.7rem,3vw,2.4rem);margin-top:.5rem;">Your family's information deserves plain answers.</h2>
+          <p class="lead" style="margin-top:1rem;">You can use SickleStrong locally on one device or create a family account for approved-caregiver access and cloud synchronization. SickleStrong does not sell personal health information. Review our Privacy &amp; Data Safety page for what is stored, where it is stored, who can access it, and how to delete it.</p>
+        </div>
+        <div class="safety-links reveal">
+          <a href="privacy.html" data-ev="privacy_page_click">
+            <svg class="lead-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg>
+            Privacy &amp; Data Safety<span class="arw" aria-hidden="true">→</span>
+          </a>
+          <a href="terms.html">
+            <svg class="lead-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/></svg>
+            Terms of Use<span class="arw" aria-hidden="true">→</span>
+          </a>
+          <a href="medical-disclaimer.html">
+            <svg class="lead-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M12 9v6M9 12h6"/></svg>
+            Medical Disclaimer<span class="arw" aria-hidden="true">→</span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ JOIN / SIGNUP ============ -->
+    <section id="join">
+      <div class="wrap join-grid">
+        <div class="join-copy reveal">
+          <span class="eyebrow">Founding beta</span>
+          <h2 style="font-size:clamp(1.85rem,3.4vw,2.6rem);margin-top:.5rem;">Help build the care tool SCD families deserve.</h2>
+          <p class="lead">Accepted founding families receive full SickleStrong access, free for life. In return, we'll ask for honest feedback about what works, what is confusing, and what families need next.</p>
+          <span class="scarcity" id="scarcity"><span class="pulse" aria-hidden="true"></span> <span class="txt">A limited number of founding-family spots are available.</span></span>
+        </div>
+
+        <div class="form-card reveal">
+          <form class="form-live" id="beta-form" novalidate>
+            <div class="field">
+              <label for="firstName">First name <span class="req" aria-hidden="true">*</span></label>
+              <input type="text" id="firstName" name="firstName" autocomplete="given-name" required aria-required="true" maxlength="80" />
+              <p class="err" id="err-firstName" role="alert"></p>
+            </div>
+            <div class="field">
+              <label for="email">Email address <span class="req" aria-hidden="true">*</span></label>
+              <input type="email" id="email" name="email" autocomplete="email" required aria-required="true" inputmode="email" />
+              <p class="err" id="err-email" role="alert"></p>
+            </div>
+            <div class="field">
+              <label for="careRole">I am managing care for <span class="req" aria-hidden="true">*</span></label>
+              <select id="careRole" name="careRole" required aria-required="true">
+                <option value="" disabled selected>Choose one…</option>
+                <option value="one-child">One child</option>
+                <option value="multiple-children">Multiple children</option>
+                <option value="myself">Myself</option>
+                <option value="family-member">A family member</option>
+                <option value="caregiver">I am a caregiver or guardian</option>
+              </select>
+              <p class="err" id="err-careRole" role="alert"></p>
+            </div>
+            <div class="field">
+              <label for="referral">How did you hear about SickleStrong? <span class="hint">(optional)</span></label>
+              <input type="text" id="referral" name="referral" maxlength="200" />
+            </div>
+
+            <!-- Honeypot: hidden from people, tempting to bots. Do not remove. -->
+            <div class="hp" aria-hidden="true">
+              <label for="company">Company (leave this field empty)</label>
+              <input type="text" id="company" name="company" tabindex="-1" autocomplete="off" />
+            </div>
+
+            <div class="consent">
+              <input type="checkbox" id="consent" name="consent" required aria-required="true" />
+              <label for="consent">I agree to receive SickleStrong beta access and product updates, and I have read the <a href="privacy.html" data-ev="privacy_page_click">Privacy &amp; Data Safety</a> notice.</label>
+            </div>
+            <p class="err" id="err-consent" role="alert" style="margin:.2rem 0 .9rem;"></p>
+
+            <div class="form-alert" id="form-alert" role="alert" aria-live="assertive"></div>
+
+            <button type="submit" class="btn btn-primary btn-block" id="beta-submit" data-cta-beta data-label-default="Join the Founding Beta">Join the Founding Beta</button>
+            <p class="microcopy">No credit card. We will not sell your information. Unsubscribe from updates at any time.</p>
+          </form>
+
+          <div class="success" id="beta-success" role="status" aria-live="polite" tabindex="-1">
+            <div class="ok" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+            <h3>You're on the founding beta list.</h3>
+            <p class="msg">Check your email for your next step. You can also open SickleStrong now or join the private beta community.</p>
+            <span class="badge" hidden>★ Founding family — lifetime access</span>
+            <div class="actions">
+              <a class="btn btn-primary" href="https://sicklestrong-v2.netlify.app/" target="_blank" rel="noopener noreferrer" data-ev="app_open">Open SickleStrong</a>
+              <a class="btn btn-secondary" href="https://www.facebook.com/groups/1343740994540360" target="_blank" rel="noopener noreferrer" data-ev="facebook_group_click">Join the Facebook Community</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ FAQ ============ -->
+    <section id="faq">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <span class="eyebrow">FAQ</span>
+          <h2>Questions families ask first.</h2>
+        </div>
+        <div class="faq-list reveal">
+          <div class="faq-item">
+            <h3 class="faq-q"><button class="faq-trigger" id="faq-btn-1" aria-expanded="true" aria-controls="faq-panel-1">Is SickleStrong free?<svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button></h3>
+            <div class="faq-panel" id="faq-panel-1" role="region" aria-labelledby="faq-btn-1"><p>Accepted founding families receive lifetime access at no cost. Pricing for future users will be announced before the public launch.</p></div>
+          </div>
+          <div class="faq-item">
+            <h3 class="faq-q"><button class="faq-trigger" id="faq-btn-2" aria-expanded="true" aria-controls="faq-panel-2">Who can use SickleStrong?<svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button></h3>
+            <div class="faq-panel" id="faq-panel-2" role="region" aria-labelledby="faq-btn-2"><p>SickleStrong is designed for a parent or caregiver managing one or multiple children, and for teens or adults managing their own sickle cell care.</p></div>
+          </div>
+          <div class="faq-item">
+            <h3 class="faq-q"><button class="faq-trigger" id="faq-btn-3" aria-expanded="true" aria-controls="faq-panel-3">Do I have to download an app?<svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button></h3>
+            <div class="faq-panel" id="faq-panel-3" role="region" aria-labelledby="faq-btn-3"><p>No. SickleStrong works in a supported web browser and can be added to your phone's home screen for easier access.</p></div>
+          </div>
+          <div class="faq-item">
+            <h3 class="faq-q"><button class="faq-trigger" id="faq-btn-4" aria-expanded="true" aria-controls="faq-panel-4">Does SickleStrong give medical advice?<svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button></h3>
+            <div class="faq-panel" id="faq-panel-4" role="region" aria-labelledby="faq-btn-4"><p>No. SickleStrong organizes information and provides care-plan reminders. It does not diagnose or treat illness and does not replace your medical team or emergency services.</p></div>
+          </div>
+          <div class="faq-item">
+            <h3 class="faq-q"><button class="faq-trigger" id="faq-btn-5" aria-expanded="true" aria-controls="faq-panel-5">How is my information stored?<svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button></h3>
+            <div class="faq-panel" id="faq-panel-5" role="region" aria-labelledby="faq-btn-5"><p>Local-only use stores care information on that device. If you create a family account, information needed for synchronization is stored in your account. See <a href="privacy.html" data-ev="privacy_page_click">Privacy &amp; Data Safety</a> for details about access, retention, deletion, and security.</p></div>
+          </div>
+          <div class="faq-item">
+            <h3 class="faq-q"><button class="faq-trigger" id="faq-btn-6" aria-expanded="true" aria-controls="faq-panel-6">Can more than one caregiver use the account?<svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button></h3>
+            <div class="faq-panel" id="faq-panel-6" role="region" aria-labelledby="faq-btn-6"><p>Approved-caregiver sharing is being tested during the founding beta. We will tell you clearly which sharing features are active before you rely on them.</p></div>
+          </div>
+          <div class="faq-item">
+            <h3 class="faq-q"><button class="faq-trigger" id="faq-btn-7" aria-expanded="true" aria-controls="faq-panel-7">What happens after I join?<svg class="faq-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg></button></h3>
+            <div class="faq-panel" id="faq-panel-7" role="region" aria-labelledby="faq-btn-7"><p>We will email your beta next step. You can open SickleStrong immediately and optionally join the private Facebook community to share feedback.</p></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ FINAL CTA ============ -->
+    <section id="final-cta">
+      <div class="wrap reveal">
+        <h2>Carry the care — not the chaos.</h2>
+        <p>Join the founding beta and help shape a simpler way to organize sickle cell care.</p>
+        <a class="btn btn-primary" href="#join" data-ev="beta_cta_click" data-cta-beta data-label-default="Join the Founding Beta">Join the Founding Beta</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site">
+    <div class="wrap foot">
+      <a class="brand" href="#top">
+        <span class="mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-4.5-9.2-8.3A5.2 5.2 0 0 1 12 6.5a5.2 5.2 0 0 1 9.2 6.2C19 16.5 12 21 12 21Z"/></svg></span>
+        SickleStrong
+      </a>
+      <nav class="foot-links" aria-label="Footer">
+        <a href="#demo">How It Works</a>
+        <a href="#features">What You Can Track</a>
+        <a href="#founder-story">Our Story</a>
+        <a href="#faq">FAQ</a>
+        <a href="privacy.html" data-ev="privacy_page_click">Privacy &amp; Data Safety</a>
+        <a href="terms.html">Terms</a>
+        <a href="medical-disclaimer.html">Medical Disclaimer</a>
+        <a href="https://sicklestrong-v2.netlify.app/" target="_blank" rel="noopener noreferrer" data-ev="app_open">Open App</a>
+      </nav>
+      <p class="foot-legal">
+        SickleStrong helps families organize sickle cell care information. It does not diagnose, treat, or replace your hematologist, medical team, or emergency services. A logged temperature of 101.3°F (38.5°C) or higher is a care-plan reminder to follow your care team's instructions and seek urgent evaluation — always follow your own care team's plan.
+        <br />© 2026 SickleStrong · Built by a father, for families living with SCD.
+      </p>
+    </div>
+  </footer>
+
+  <!-- Sticky mobile CTA (appears after the hero on small screens) -->
+  <div class="mobile-cta" id="mobileCta" aria-hidden="true">
+    <a class="btn btn-primary" href="#join" data-ev="beta_cta_click" data-cta-beta data-label-default="Join the Founding Beta">Join the Founding Beta</a>
+  </div>
+
+  <script src="assets/js/analytics.js" defer></script>
+  <script src="assets/js/main.js" defer></script>
+  <script src="assets/js/signup.js" defer></script>
+</body>
+</html>

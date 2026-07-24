@@ -1,0 +1,41 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="SickleStrong — one clear place for your family's sickle cell care">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0EA89A"/>
+      <stop offset="0.5" stop-color="#12897E"/>
+      <stop offset="1" stop-color="#6C3FCF"/>
+    </linearGradient>
+    <linearGradient id="mark" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0EA89A"/>
+      <stop offset="1" stop-color="#6C3FCF"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <circle cx="1040" cy="120" r="360" fill="#ffffff" opacity="0.06"/>
+  <circle cx="150" cy="560" r="240" fill="#ffffff" opacity="0.05"/>
+
+  <!-- brand row -->
+  <g transform="translate(90,86)">
+    <rect width="66" height="66" rx="17" fill="#ffffff"/>
+    <path d="M33 52s-17-9.9-17-22.4A9.3 9.3 0 0 1 33 22.6a9.3 9.3 0 0 1 17 7.1C50 42.1 33 52 33 52Z" fill="url(#mark)"/>
+    <text x="86" y="46" font-family="Georgia, 'Times New Roman', serif" font-size="40" font-weight="700" fill="#ffffff">SickleStrong</text>
+  </g>
+
+  <!-- eyebrow -->
+  <g transform="translate(92,214)">
+    <rect width="26" height="4" y="10" rx="2" fill="#ffffff" opacity="0.85"/>
+    <text x="40" y="20" font-family="Arial, sans-serif" font-size="22" letter-spacing="3" font-weight="700" fill="#ffffff" opacity="0.92">FOUNDING BETA NOW OPEN</text>
+  </g>
+
+  <!-- headline -->
+  <text x="90" y="320" font-family="Georgia, 'Times New Roman', serif" font-size="76" font-weight="700" fill="#ffffff">One clear place for your</text>
+  <text x="90" y="404" font-family="Georgia, 'Times New Roman', serif" font-size="76" font-weight="700" fill="#ffffff">family's sickle cell care.</text>
+
+  <!-- subline -->
+  <text x="92" y="474" font-family="Arial, sans-serif" font-size="30" fill="#ffffff" opacity="0.9">Medications, hydration, pain, temperature, and appointments —</text>
+  <text x="92" y="514" font-family="Arial, sans-serif" font-size="30" fill="#ffffff" opacity="0.9">for one child, multiple children, or yourself.</text>
+
+  <!-- trust line -->
+  <text x="92" y="576" font-family="Arial, sans-serif" font-size="24" fill="#ffffff" opacity="0.8">Built by an SCD father  ·  No credit card  ·  Lifetime access for founding families</text>
+</svg>

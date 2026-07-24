@@ -1,0 +1,12 @@
+# Secrets — never commit real environment values
+.env
+.env.*
+!.env.example
+
+# Dependencies / build output (none required, but just in case)
+node_modules/
+.netlify/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
