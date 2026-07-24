@@ -67,10 +67,13 @@ This creates:
   `status`, `founding_family`);
 - **Row Level Security enabled with no public policies** — the anon/public roles
   get zero access; only the service role (used by the functions) can reach it;
-- **`claim_beta_signup(...)`** — inserts one signup, de-duplicates by normalized
-  email, and assigns `founding_family = true` to the first 50 unique signups
-  using an advisory lock so the cap can never be exceeded under concurrent
-  submissions;
+- **`claim_beta_signup(...)`** — inserts one signup and de-duplicates by
+  normalized email. **Founding-family rule:** the first 50 unique completed
+  signups are stored with `founding_family = true` and `status = 'new'`; every
+  later unique signup is stored with `founding_family = false` and
+  `status = 'waitlisted'`. An advisory lock serializes the assignment so the cap
+  of 50 can never be exceeded under concurrent submissions. There is **no
+  separate approval step**;
 - **`beta_counts()`** — returns aggregate numbers only (no names/emails).
 
 Grab two values from **Project Settings → API**:
@@ -90,12 +93,14 @@ In the Netlify UI: **Site configuration → Environment variables → Add a vari
 |---|---|
 | `SUPABASE_URL` | `https://YOURPROJECT.supabase.co` |
 | `SUPABASE_SERVICE_ROLE_KEY` | your Supabase **service_role** key |
+| `ALLOWED_ORIGIN` *(optional)* | your site origin(s), e.g. `https://sicklestrong.org` — comma-separate multiple; leave unset to skip the origin check |
 
 Or with the Netlify CLI:
 
 ```bash
 netlify env:set SUPABASE_URL "https://YOURPROJECT.supabase.co"
 netlify env:set SUPABASE_SERVICE_ROLE_KEY "eyJhbGci...your-service-role-key..."
+netlify env:set ALLOWED_ORIGIN "https://your-site-domain"   # optional origin allowlist
 ```
 
 Never commit real values. `.env` is for local use only (see below).
@@ -158,17 +163,21 @@ After deploy, update the production domain in `index.html` (canonical + OG URLs)
 
 ### Verify a saved signup
 1. Submit the form on the deployed site with a **new** email.
-2. You should see the success state ("You're on the founding beta list").
+2. For one of the first 50, you should see the founding success state:
+   *"You're officially a SickleStrong founding family."*
 3. In Supabase → **Table Editor → beta_signups**, confirm a new row exists with
-   your `first_name`, lowercased `email`, `care_role`, `consent_at`, and
-   `founding_family = true` (for one of the first 50).
+   your `first_name`, lowercased `email`, `care_role`, `consent_at`,
+   `founding_family = true`, and `status = 'new'`.
 
 Only after seeing the row should you consider signups "working".
 
 ### Test duplicate-email handling
 1. Submit the **same email** again.
-2. The response is friendly: *"You're already on the founding beta list."*
-3. In Supabase, confirm **no second row** was created (email is unique).
+2. The response is friendly and reflects the record's **existing** status —
+   *"You're already a SickleStrong founding family."* for a founding record, or
+   *"You're already on the SickleStrong waitlist."* for a waitlisted one.
+3. In Supabase, confirm **no second row** was created (email is unique) and the
+   original `founding_family`/`status` are unchanged.
 
 ### Test the founding-family counter
 1. Hit `/.netlify/functions/beta-count` (or reload the page). The counter reads,
@@ -183,14 +192,16 @@ You don't need 50 real people — temporarily lower the cap to test:
 
 1. In `supabase/beta-signups.sql`, change `c_limit constant int := 50;` (and the
    `50` inside `beta_counts()`) to e.g. `2`, and re-run the file.
-2. Submit 2 signups → both get `founding_family = true`.
-3. Submit a 3rd → it's **still saved** (`founding_family = false`), and the page
-   flips every beta CTA to **"Join the Waitlist"** with the message
-   *"All 2 founding-family spots are full — join the waitlist…"*.
-4. Restore the cap to `50` and re-run the file when done.
+2. Submit 2 signups → both get `founding_family = true`, `status = 'new'`.
+3. Submit a 3rd → it's **still saved** with `founding_family = false` and
+   `status = 'waitlisted'`. The success state reads *"You're on the SickleStrong
+   waitlist…"*, and the page flips every beta CTA to **"Join the Waitlist"**.
+4. Confirm in Supabase that the waitlisted rows have `status = 'waitlisted'`.
+5. Restore the cap to `50` and re-run the file when done.
 
 To simulate concurrency, fire several signups at once (e.g. a small `xargs -P`
-loop of the curl command); the founding count must never exceed the cap.
+loop of the curl command); the founding count must never exceed the cap, and
+the 50th unique signup must be founding while the 51st is waitlisted.
 
 ---
 
@@ -238,9 +249,32 @@ save — never before.
   network call is the same-origin form POST (`connect-src 'self'`), so the CSP
   needs no third-party hosts unless you add analytics (§7).
 - All external links use `target="_blank" rel="noopener noreferrer"`.
-- A honeypot field (`company`) plus server-side validation provide basic bot
-  protection without harming accessibility. For heavier abuse, add Netlify rate
-  limiting / edge protection in front of the function.
+
+### Abuse protection built into `beta-signup.js`
+
+The function applies, in code:
+
+- **Body-size limit** — requests larger than **10 KB** are rejected (`413`).
+- **UTM length clamp** — `utm_source` / `utm_medium` / `utm_campaign` are trimmed
+  to **150 chars** before storage.
+- **Origin allowlist** — if `ALLOWED_ORIGIN` is set, the request `Origin` header
+  must match one of the comma-separated values or the request is rejected
+  (`403`). Leave it unset to skip (e.g. local `netlify dev`).
+- **Honeypot** — a hidden `company` field; bot-filled submissions are accepted
+  silently and **not** stored.
+- **Strict server-side validation** — every field is re-validated on the server.
+
+> **Not implemented in code: application-level rate limiting.** Do not describe
+> per-IP/request-rate limiting as active — it isn't. Add it at the platform edge:
+>
+> - **Netlify rate limiting** — configure it on the function/site in the Netlify
+>   dashboard (**Site configuration → …**) or with a Netlify **edge function** that
+>   rejects excess requests before they reach `beta-signup`. See Netlify's
+>   "Rate limiting" docs for the plan/feature availability on your account.
+> - **Or** a lightweight store-backed limiter (e.g. Upstash Ratelimit) called from
+>   the function. If you add one, remember to widen the CSP/`connect-src` only if
+>   the call happens from the browser (it should happen server-side, so no CSP
+>   change is needed).
 
 ---
 
@@ -309,7 +343,11 @@ first drafts** and each shows a "Draft for review" banner. Before publishing:
       `terms.html`, `medical-disclaimer.html`, `robots.txt`, `sitemap.xml`.
 - [ ] Confirm the app link (`https://sicklestrong-v2.netlify.app/`) and Facebook
       group (`https://www.facebook.com/groups/1343740994540360`) are correct.
-- [ ] Decide whether `founding_family` counts `new` or only `accepted` signups —
-      the current logic counts every stored founding signup.
-- [ ] Set up the confirmation email you promise in the success state (e.g. a
-      Supabase trigger, an email provider, or a follow-up automation).
+- [ ] Set `ALLOWED_ORIGIN` to your production origin(s) and add platform rate
+      limiting (§8) before a public push.
+- [ ] Founding-family rule is fixed: the first 50 unique completed signups get
+      `founding_family = true`; later signups are `waitlisted`. No approval step
+      is implemented — don't add approval wording unless you build one.
+- [ ] The UI does **not** promise a confirmation email. If you later add one
+      (e.g. a Supabase trigger or email provider), only then update the copy to
+      mention email — and add an unsubscribe path before promising updates.

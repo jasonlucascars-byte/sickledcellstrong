@@ -47,8 +47,13 @@ revoke all on public.beta_signups from anon, authenticated;
 
 -- ============================================================
 -- claim_beta_signup — atomic insert with de-dup + founding assignment
+-- Rule: the first 50 unique completed signups get founding_family = true
+-- (status 'new'); every later unique signup is stored with
+-- founding_family = false and status = 'waitlisted'. No separate approval
+-- step is implemented.
 -- Returns one row describing the outcome. `out_is_new` is false when the
--- email was already registered (friendly duplicate handling).
+-- email was already registered (friendly duplicate handling); in that case
+-- the row's existing founding_family/status is returned unchanged.
 -- ============================================================
 create or replace function public.claim_beta_signup(
   p_first_name       text,
@@ -69,8 +74,9 @@ declare
   v_first    text := trim(p_first_name);
   v_ref      text := nullif(trim(coalesce(p_referral_source, '')), '');
   v_founding boolean := false;
+  v_status   text := 'new';
   v_count    int;
-  c_limit    constant int := 50;   -- founding-family cap
+  c_limit    constant int := 50;   -- founding-family cap (first 50 unique signups)
   r          public.beta_signups%rowtype;
 begin
   -- already registered? return the existing record (duplicate).
@@ -88,16 +94,20 @@ begin
 
   select count(*) into v_count from public.beta_signups b where b.founding_family = true;
   if v_count < c_limit then
-    v_founding := true;
+    v_founding := true;         -- first 50 unique signups → founding family
+    v_status   := 'new';
+  else
+    v_founding := false;        -- later signups → waitlist
+    v_status   := 'waitlisted';
   end if;
 
   begin
     insert into public.beta_signups
       (first_name, email, care_role, referral_source, consent_at,
-       utm_source, utm_medium, utm_campaign, founding_family)
+       utm_source, utm_medium, utm_campaign, status, founding_family)
     values
       (v_first, v_email, p_care_role, v_ref, now(),
-       p_utm_source, p_utm_medium, p_utm_campaign, v_founding)
+       p_utm_source, p_utm_medium, p_utm_campaign, v_status, v_founding)
     returning email, founding_family, status into out_email, out_founding, out_status;
     out_is_new := true;
     return next;

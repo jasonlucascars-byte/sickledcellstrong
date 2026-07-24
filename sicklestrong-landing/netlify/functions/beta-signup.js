@@ -28,6 +28,17 @@ const CARE_ROLES = new Set([
 const APP_URL = "https://sicklestrong-v2.netlify.app/";
 const FB_URL = "https://www.facebook.com/groups/1343740994540360";
 
+// --- abuse protection knobs ---
+const MAX_BODY_BYTES = 10 * 1024; // reject request bodies larger than 10 KB
+const MAX_UTM_LEN = 150;          // clamp UTM field lengths
+// Comma-separated allowlist of origins, e.g. "https://sicklestrong.org".
+// If unset, the origin check is skipped (handy for local `netlify dev`).
+const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || "";
+// NOTE: this file does NOT implement application-level rate limiting. Bot
+// protection here = body-size limit + origin allowlist + honeypot + strict
+// server-side validation. For request-rate limits, use Netlify's platform
+// rate limiting / an edge function (see the README).
+
 function json(statusCode, body) {
   return {
     statusCode,
@@ -38,10 +49,27 @@ function json(statusCode, body) {
 
 const normEmail = (e) => String(e || "").trim().toLowerCase();
 const validEmail = (e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e) && e.length <= 254;
+const clampUtm = (v) => (v ? String(v).slice(0, MAX_UTM_LEN) : null);
+
+function originAllowed(event) {
+  if (!ALLOWED_ORIGIN) return true; // not configured → skip the check
+  const allow = ALLOWED_ORIGIN.split(",").map((s) => s.trim()).filter(Boolean);
+  const h = event.headers || {};
+  const origin = h.origin || h.Origin || "";
+  return !!origin && allow.indexOf(origin) !== -1;
+}
 
 exports.handler = async (event) => {
   if (event.httpMethod !== "POST") {
     return json(405, { ok: false, error: "method_not_allowed", message: "Use POST." });
+  }
+  // Reject oversized bodies before doing any parsing/work.
+  if (event.body && Buffer.byteLength(event.body, "utf8") > MAX_BODY_BYTES) {
+    return json(413, { ok: false, error: "too_large", message: "That request was too large." });
+  }
+  // Origin allowlist (configurable via ALLOWED_ORIGIN; skipped when unset).
+  if (!originAllowed(event)) {
+    return json(403, { ok: false, error: "forbidden_origin", message: "This request was blocked." });
   }
   if (!SUPABASE_URL || !SERVICE_ROLE) {
     return json(500, {
@@ -86,9 +114,9 @@ exports.handler = async (event) => {
     p_email: email,
     p_care_role: care_role,
     p_referral_source: referral_source,
-    p_utm_source: utm.source || null,
-    p_utm_medium: utm.medium || null,
-    p_utm_campaign: utm.campaign || null,
+    p_utm_source: clampUtm(utm.source),
+    p_utm_medium: clampUtm(utm.medium),
+    p_utm_campaign: clampUtm(utm.campaign),
   };
 
   let resp;

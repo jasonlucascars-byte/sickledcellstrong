@@ -89,23 +89,32 @@
     if (!started) { started = true; track("beta_form_start", {}); }
   }, { once: false });
 
-  function showSuccess(duplicate, founding) {
+  function showSuccess(duplicate, founding, status) {
     form.hidden = true;
-    if (success) {
-      var h = success.querySelector("h3");
-      var p = success.querySelector("p.msg");
-      var badge = success.querySelector(".badge");
-      if (duplicate) {
-        if (h) h.textContent = "You're already on the founding beta list.";
-        if (p) p.textContent = "This email is already registered. You can open SickleStrong now or join the private beta community.";
-      } else {
-        if (h) h.textContent = "You're on the founding beta list.";
-        if (p) p.textContent = "Check your email for your next step. You can also open SickleStrong now or join the private beta community.";
-      }
-      if (badge) { badge.hidden = !founding; }
-      success.classList.add("show");
-      if (success.focus) success.focus();
+    if (!success) return;
+    var h = success.querySelector("h3");
+    var p = success.querySelector("p.msg");
+    var badge = success.querySelector(".badge");
+
+    // Waitlisted when the backend says so (status) or the record isn't a
+    // founding family. Messaging always reflects the stored status, including
+    // for duplicates.
+    var waitlisted = status === "waitlisted" || founding === false;
+    var heading, body;
+
+    if (waitlisted) {
+      heading = duplicate ? "You're already on the SickleStrong waitlist." : "You're on the SickleStrong waitlist.";
+      body = "We saved your information and will contact you when another beta spot becomes available.";
+    } else {
+      heading = duplicate ? "You're already a SickleStrong founding family." : "You're officially a SickleStrong founding family.";
+      body = "Your signup has been saved. You can open SickleStrong now or join the private beta community.";
     }
+
+    if (h) h.textContent = heading;
+    if (p) p.textContent = body;
+    if (badge) badge.hidden = waitlisted; // founding badge only for founding families
+    success.classList.add("show");
+    if (success.focus) success.focus();
   }
 
   /* ---------------- submit ---------------- */
@@ -156,8 +165,8 @@
         var b = res.body || {};
         if (res.status === 200 && b.ok) {
           // Backend confirmed the record is saved — NOW fire the conversion.
-          track("beta_form_submit_success", { duplicate: !!b.duplicate, founding_family: !!b.founding_family });
-          showSuccess(!!b.duplicate, !!b.founding_family);
+          track("beta_form_submit_success", { duplicate: !!b.duplicate, founding_family: !!b.founding_family, status: b.status || null });
+          showSuccess(!!b.duplicate, !!b.founding_family, b.status);
           loadCount();
           return;
         }
