@@ -255,7 +255,7 @@ header.site.scrolled { border-bottom-color: var(--line); }
 .med.done .name { color: var(--ink-soft); }
 .device .btn { font-size: .92rem; min-height: 44px; }
 
-/* ---------- demo section (read-only, in-page) ---------- */
+/* ---------- demo section (interactive, in-page) ---------- */
 #demo { background: var(--bg-2); border-block: 1px solid var(--line); }
 .demo-grid { display: grid; gap: clamp(28px, 4vw, 48px); align-items: start; }
 @media (min-width: 900px) { .demo-grid { grid-template-columns: .9fr 1.1fr; } }
@@ -288,6 +288,32 @@ header.site.scrolled { border-bottom-color: var(--line); }
 .demo-copy ul { margin: 1.2rem 0 0; padding: 0; list-style: none; display: grid; gap: .7rem; }
 .demo-copy ul li { display: flex; gap: .6rem; align-items: flex-start; color: var(--ink-soft); }
 .demo-copy ul li svg { width: 20px; height: 20px; color: var(--accent-text); flex: none; margin-top: 2px; }
+.demo-reassure { margin-top: 1rem; font-size: .9rem; font-weight: 600; color: var(--accent-text); }
+
+/* ---------- interactive demo controls (added by demo.js) ---------- */
+.med-toggle { width: 100%; min-height: 44px; text-align: left; background: none; border: 0; border-radius: 8px; font: inherit; color: inherit; cursor: pointer; }
+.med-toggle:hover { background: var(--bg-2); }
+.med-toggle:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.meds-count { text-transform: none; letter-spacing: 0; font-weight: 600; color: var(--ink-faint); }
+.cup-btn { margin-top: .5rem; width: 100%; min-height: 40px; border: 1.5px solid var(--line); background: var(--surface); color: var(--accent-text); border-radius: 8px; font: inherit; font-weight: 600; font-size: .82rem; cursor: pointer; }
+.cup-btn:hover { border-color: var(--teal); background: var(--teal-faint); }
+.cup-btn:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.demo-fever { display: flex; gap: .5rem; align-items: flex-start; margin: 10px 0; padding: .55rem .7rem; border-radius: 10px; background: var(--warn-bg); color: var(--warn); border: 1px solid color-mix(in srgb, var(--warn) 26%, transparent); font-size: .8rem; font-weight: 600; }
+.demo-fever svg { width: 16px; height: 16px; flex: none; margin-top: 1px; }
+.demo-try { margin-top: 14px; padding: .9rem 1rem; border: 1px dashed var(--line); border-radius: 12px; background: var(--surface); }
+.demo-try h4 { font-family: var(--sans); font-size: .74rem; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-faint); font-weight: 700; margin: 0 0 .7rem; display: flex; align-items: center; gap: .4rem; }
+.demo-try-tag { text-transform: none; letter-spacing: 0; font-size: .66rem; font-weight: 700; color: var(--purple); background: var(--purple-light); padding: .1rem .4rem; border-radius: 999px; }
+.try-row { display: flex; flex-direction: column; gap: .35rem; margin-bottom: .7rem; }
+.try-row > label { font-size: .8rem; font-weight: 600; color: var(--ink); }
+.try-inline { display: flex; gap: .4rem; flex-wrap: wrap; align-items: center; }
+.try-inline input, .try-inline select { font-family: var(--sans); font-size: .9rem; color: var(--ink); background: var(--bg); border: 1.5px solid var(--line); border-radius: 8px; padding: .5rem .6rem; min-height: 44px; }
+.try-inline input[type="number"] { width: 110px; }
+.try-inline input[type="text"] { flex: 1; min-width: 130px; }
+.try-inline input:focus, .try-inline select:focus { outline: none; border-color: var(--purple); box-shadow: 0 0 0 3px color-mix(in srgb, var(--purple) 20%, transparent); }
+.try-btn { min-height: 44px; padding: .5rem .9rem; font-size: .9rem; }
+.demo-reset { margin-top: .2rem; background: none; border: 0; color: var(--ink-faint); font: inherit; font-size: .82rem; font-weight: 600; cursor: pointer; padding: .35rem .1rem; text-decoration: underline; text-underline-offset: 3px; }
+.demo-reset:hover { color: var(--ink); }
+.demo-reset:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 
 /* ---------- proof strip ---------- */
 #product-proof { background: var(--surface-2); border-block: 1px solid var(--line); }

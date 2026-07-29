@@ -33,6 +33,7 @@ assets/
   js/theme.js                  Pre-paint theme (no flash); runs in <head>
   js/analytics.js              Analytics layer — NO fake config (see §7)
   js/main.js                   UI: theme toggle, reveal, FAQ, demo tabs, events
+  js/demo.js                   Interactive demo (tap meds, +cup, log sample temp/pain); no sign-up, nothing stored
   js/signup.js                 Form validation + submit + live counter
   img/favicon.svg              SVG favicon (teal→purple heart)
   img/apple-touch-icon.png     Reused from the SickleStrong app

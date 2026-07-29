@@ -54,7 +54,7 @@
         SickleStrong
       </a>
       <nav class="nav-links" aria-label="Primary">
-        <a href="#demo">How It Works</a>
+        <a href="#demo" data-ev="demo_open">Try the Demo</a>
         <a href="#features">What You Can Track</a>
         <a href="#founder-story">Our Story</a>
         <a href="#faq">FAQ</a>
@@ -80,7 +80,7 @@
           <p class="lead">Track medications, hydration, pain, temperature, symptoms, appointments, and care notes — for one child, multiple children, or yourself. SickleStrong helps turn everyday details into a more organized record for your family and care team.</p>
           <div class="hero-actions">
             <a class="btn btn-primary" href="#join" data-ev="beta_cta_click" data-cta-beta data-label-default="Join the Founding Beta">Join the Founding Beta</a>
-            <a class="btn btn-secondary" href="#demo" data-ev="demo_open">See How It Works</a>
+            <a class="btn btn-secondary" href="#demo" data-ev="demo_open">Try it — no sign-up</a>
           </div>
           <p class="trust-line">
             <span class="ribbon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 9l6 10M15 9L9 19M12 3a3 3 0 0 1 0 6 3 3 0 0 1 0-6Z"/></svg>Built by an SCD father</span>
@@ -128,19 +128,20 @@
       </div>
     </section>
 
-    <!-- ============ DEMO (read-only, in-page, sample data) ============ -->
+    <!-- ============ DEMO (interactive, in-page, sample data) ============ -->
     <section id="demo">
       <div class="wrap demo-grid">
         <div class="demo-copy reveal">
-          <span class="eyebrow">Interactive demo · sample data</span>
-          <h2 style="font-size:clamp(1.85rem,3.4vw,2.6rem);margin-top:.5rem;">See how SickleStrong works — before you sign up.</h2>
-          <p class="lead">This is a read-only preview built from synthetic data. Switch between two example profiles and explore what a real day looks like. No account or personal details required.</p>
+          <span class="eyebrow">Try it · no sign-up</span>
+          <h2 style="font-size:clamp(1.85rem,3.4vw,2.6rem);margin-top:.5rem;">Try SickleStrong right here — no sign-up.</h2>
+          <p class="lead">This live preview uses sample data — no account, no email, nothing to install. Tap a medication to mark it taken, add a cup of water, or log a sample temperature or pain entry and watch the dashboard react.</p>
           <ul>
             <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Switch between <strong>Amir</strong> and <strong>Jordan</strong></li>
-            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>See medication and hydration status</li>
-            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Review pain &amp; symptom history</li>
-            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Open a care-summary preview</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Check off today's medications and hydration</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Log a sample temperature or pain entry</li>
+            <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>See the care-summary preview update</li>
           </ul>
+          <p class="demo-reassure">No account, no email — just explore. Nothing you do here is saved.</p>
           <div class="hero-actions">
             <a class="btn btn-primary" href="#join" data-ev="beta_cta_click" data-cta-beta data-label-default="Join the Founding Beta">Join the Founding Beta</a>
             <a class="btn btn-secondary" href="https://sicklestrong-v2.netlify.app/" target="_blank" rel="noopener noreferrer" data-ev="app_open">Open SickleStrong</a>
@@ -515,7 +516,7 @@
         SickleStrong
       </a>
       <nav class="foot-links" aria-label="Footer">
-        <a href="#demo">How It Works</a>
+        <a href="#demo" data-ev="demo_open">Try the Demo</a>
         <a href="#features">What You Can Track</a>
         <a href="#founder-story">Our Story</a>
         <a href="#faq">FAQ</a>
@@ -538,6 +539,7 @@
 
   <script src="assets/js/analytics.js" defer></script>
   <script src="assets/js/main.js" defer></script>
+  <script src="assets/js/demo.js" defer></script>
   <script src="assets/js/signup.js" defer></script>
 </body>
 </html>
