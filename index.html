@@ -1366,10 +1366,13 @@
                             <span style="font-size:20px;">👨‍👩‍👧‍👦</span>
                             <span>Family Account</span>
                         </div>
-                        <button class="btn btn-secondary btn-small" onclick="showFamilyMembers()">Manage</button>
+                        <div style="display:flex;gap:8px;">
+                            <button class="btn btn-secondary btn-small" onclick="showChildShareCode()">🔗 Share child</button>
+                            <button class="btn btn-secondary btn-small" onclick="showFamilyMembers()">Manage</button>
+                        </div>
                     </div>
                     <div id="familyMembersPreview">
-                        <div style="font-size:13px;color:var(--text-light);">Add family members to share care access.</div>
+                        <div style="font-size:13px;color:var(--text-light);">Share a child's code to give someone access to that child only.</div>
                     </div>
                 </div>
 
@@ -1730,14 +1733,17 @@
                     <button class="btn btn-primary btn-full" style="margin-top:8px;" onclick="handleLogin()">
                         Sign In 💙
                     </button>
-                    <div class="auth-divider">or join a family</div>
+                    <div class="auth-divider">or join with a child code</div>
                     <div class="input-group">
-                        <label class="input-label">Family Code</label>
+                        <label class="input-label">Child Code</label>
                         <input type="text" class="input-field family-code-input" id="familyCodeInput"
-                               placeholder="STRONG-0000" maxlength="11" />
+                               placeholder="C-AB12CD" maxlength="8" />
+                        <p style="font-size:11px;color:var(--text-light);margin-top:4px;">
+                            Enter the code shared with you to get access to that one child.
+                        </p>
                     </div>
                     <button class="btn btn-secondary btn-full" onclick="joinWithFamilyCode()">
-                        Join Family Account
+                        Join with Child Code
                     </button>
                 </div>
 
@@ -5910,6 +5916,9 @@
                 appData.contacts.forEach(c => c.isPrimary = false);
             }
 
+            const child = getCurrentChild();
+            if (!child) { alert('Select a child before adding a contact.'); return; }
+
             const contactData = {
                 type: typeRadio.value,
                 name,
@@ -5917,18 +5926,23 @@
                 email: document.getElementById('contactEmail').value.trim(),
                 address: document.getElementById('contactAddress').value.trim(),
                 notes: document.getElementById('contactNotes').value.trim(),
+                childId: child.id,
                 isPrimary
             };
 
+            let savedContact;
             if (editId) {
                 const existing = appData.contacts.find(c => c.id === editId);
-                if (existing) Object.assign(existing, contactData);
+                if (existing) { Object.assign(existing, contactData); savedContact = existing; }
             } else {
-                appData.contacts.push({ id: Date.now(), ...contactData });
+                savedContact = { id: Date.now(), ...contactData };
+                appData.contacts.push(savedContact);
             }
 
             saveData();
-            getCurrentFamilyId().then(fid => { if (fid) cloudSync(() => _pushContact(newContact, fid)); });
+            if (savedContact) {
+                getCurrentFamilyId().then(fid => cloudSync(() => _pushContact(savedContact, child.id, fid)));
+            }
             document.querySelector('.modal.active')?.remove();
             updateUI();
             setTimeout(() => alert(`✅ ${name} ${editId ? 'updated' : 'added to emergency contacts'}`), 100);
@@ -6783,6 +6797,9 @@
             _cachedFamilyId = dbUser.family_id;
             const familyId = _cachedFamilyId;
 
+            // NOTE: reads are scoped by RLS (child_access), not by family_id, so a
+            // caregiver who redeemed one child's code sees ONLY that child — even
+            // across families. We intentionally do not filter by family_id here.
             const [
                 { data: children },
                 { data: meds },
@@ -6793,14 +6810,14 @@
                 { data: weightRows },
                 { data: noteRows }
             ] = await Promise.all([
-                sb.from('children').select('*').eq('family_id', familyId).eq('is_active', true),
-                sb.from('medications').select('*').eq('family_id', familyId).eq('is_active', true),
-                sb.from('contacts').select('*').eq('family_id', familyId).order('sort_order'),
-                sb.from('pain_logs').select('*').eq('family_id', familyId).order('logged_at', { ascending: false }).limit(200),
-                sb.from('temperature_logs').select('*').eq('family_id', familyId).order('logged_at', { ascending: false }).limit(200),
-                sb.from('symptoms').select('*').eq('family_id', familyId).order('logged_at', { ascending: false }).limit(200),
-                sb.from('weight_logs').select('*').eq('family_id', familyId).order('logged_at', { ascending: false }).limit(100),
-                sb.from('notes').select('*').eq('family_id', familyId).order('created_at', { ascending: false }).limit(100)
+                sb.from('children').select('*').eq('is_active', true),
+                sb.from('medications').select('*').eq('is_active', true),
+                sb.from('contacts').select('*').order('sort_order'),
+                sb.from('pain_logs').select('*').order('logged_at', { ascending: false }).limit(200),
+                sb.from('temperature_logs').select('*').order('logged_at', { ascending: false }).limit(200),
+                sb.from('symptoms').select('*').order('logged_at', { ascending: false }).limit(200),
+                sb.from('weight_logs').select('*').order('logged_at', { ascending: false }).limit(100),
+                sb.from('notes').select('*').order('created_at', { ascending: false }).limit(100)
             ]);
 
             if (children && children.length > 0) {
@@ -6825,6 +6842,7 @@
                         gender: c.gender,
                         bloodType: c.blood_type,
                         diseaseType: c.disease_type,
+                        shareCode: c.share_code,
                         emoji: c.emoji || '👧🏾',
                         color: c.color || childColors[idx % childColors.length],
                         photo: c.photo_url,
@@ -6908,6 +6926,7 @@
                     email: c.email,
                     address: c.address,
                     notes: c.notes,
+                    childId: c.child_id,
                     isPrimary: c.is_primary
                 }));
             }
@@ -7020,10 +7039,14 @@
             });
         }
 
-        async function _pushContact(contact, familyId) {
+        async function _pushContact(contact, childId, familyId) {
+            // child_id is required (DB enforces NOT NULL). Reject loudly rather
+            // than letting a null-child_id contact silently vanish under RLS.
+            if (!childId) throw new Error('Cannot sync contact: no child selected');
             const isUUID = typeof contact.id === 'string' && /^[0-9a-f-]{36}$/.test(contact.id);
             const payload = {
                 family_id: familyId,
+                child_id: childId,
                 type: contact.type || null,
                 name: contact.name,
                 phone: contact.phone || null,
@@ -7164,41 +7187,40 @@
             closeAuthScreen();
             updateFamilyMembersPreview();
             trackFamilyAccountCreated();
-            alert(`Account created! 💙\n\nYour Family Code: ${familyCode}\n\nShare this code with family members so they can join your account.`);
+            alert(`Account created! 💙\n\nTo share a specific child with another caregiver, open the Family Account card and tap "🔗 Share child" — each child has its own code that shares that child only.`);
         }
 
+        // Per-child join: redeem a single child's share code. Grants access to
+        // ONLY that child — the redeemer never sees other children or caregivers
+        // in the family (enforced by RLS + the redeem_child_code function).
         async function joinWithFamilyCode() {
             const code = document.getElementById('familyCodeInput').value.trim().toUpperCase();
-            if (!code || code.length < 8) {
-                alert('Please enter a valid family code (e.g. STRONG-1234).'); return;
-            }
-
-            const { data: family } = await sb.from('families').select('*').eq('family_code', code).single();
-            if (!family) {
-                alert('Family code not found. Please check the code and try again.'); return;
+            if (!code) {
+                alert('Please enter the child code you were given (e.g. C-AB12CD).'); return;
             }
 
             const name = prompt('Your name:');
             const email = prompt('Your email:');
             const password = prompt('Create a password (min 8 characters):');
-
             if (!name || !email || !password) return;
 
             const { data, error } = await sb.auth.signUp({ email, password });
             if (error) { alert('Sign up failed: ' + error.message); return; }
 
-            await sb.from('users').insert({
-                auth_id: data.user.id,
-                family_id: family.id,
-                full_name: name,
-                email,
-                role: 'caregiver',
-                is_primary: false
-            });
+            // Redeem the code. The SECURITY DEFINER function validates it,
+            // enforces the 5-caregiver cap, and creates the users + child_access rows.
+            const { data: redeemed, error: rErr } = await sb.rpc('redeem_child_code', { p_code: code });
+            if (rErr || !redeemed || redeemed.length === 0) {
+                alert('That child code is invalid or has reached its 5-caregiver limit. Please check with the person who shared it.');
+                return;
+            }
+            const childName = redeemed[0].out_child_name;
+
+            // Set the display name on the profile the function just created.
+            await sb.from('users').update({ full_name: name }).eq('auth_id', data.user.id);
 
             familyAuth.isLoggedIn = true;
-            familyAuth.currentUser = { id: data.user.id, name, email, role: 'caregiver', familyCode: code, familyId: family.id, isPrimary: false };
-            familyAuth.familyCode = code;
+            familyAuth.currentUser = { id: data.user.id, name, email, role: 'caregiver', isPrimary: false };
             localStorage.setItem('ss_auth', JSON.stringify(familyAuth));
             localStorage.setItem('ss_auth_dismissed', 'true');
 
@@ -7206,7 +7228,46 @@
             await syncAllFromCloud();
             updateFamilyMembersPreview();
             trackFamilyMemberJoined();
-            alert(`You've joined the family account! 💙`);
+            alert(`You now have access to ${childName}! 💙`);
+        }
+
+        // Show the current child's share code so an owner can invite a caregiver
+        // to THAT child only.
+        function showChildShareCode() {
+            const child = getCurrentChild();
+            if (!child) { alert('Select a child first.'); return; }
+            if (!child.shareCode) {
+                alert('This child\'s share code will appear once you\'re signed in and synced.');
+                return;
+            }
+            const modal = document.createElement('div');
+            modal.className = 'modal active';
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width:400px;">
+                    <div style="background:linear-gradient(135deg,var(--primary),var(--purple));padding:20px;border-radius:20px 20px 0 0;margin:-20px -20px 20px;">
+                        <button class="modal-close" onclick="this.closest('.modal').remove()" style="color:white;">×</button>
+                        <div style="color:white;font-size:18px;font-weight:800;">🔗 Share ${child.name}</div>
+                        <div style="color:rgba(255,255,255,0.75);font-size:12px;margin-top:4px;">Give this code to a caregiver so they can see ${child.name} — and only ${child.name}.</div>
+                    </div>
+                    <div style="text-align:center;padding:8px 0 16px;">
+                        <div style="font-family:monospace;font-size:30px;font-weight:800;letter-spacing:.1em;color:var(--primary);">${child.shareCode}</div>
+                        <p style="font-size:12px;color:var(--text-light);margin-top:10px;">Up to 5 people can have access to each child. This code shares this child's data only — never your other children.</p>
+                    </div>
+                    <button class="btn btn-secondary btn-full" style="margin-bottom:8px;" onclick="rotateChildShareCode('${child.id}')">🔄 Generate a new code</button>
+                    <button class="btn btn-primary btn-full" onclick="this.closest('.modal').remove()">Done</button>
+                </div>`;
+            document.body.appendChild(modal);
+        }
+
+        async function rotateChildShareCode(childId) {
+            if (!confirm('Generate a new code? The old code will stop working immediately.')) return;
+            const { data, error } = await sb.rpc('rotate_child_share_code', { p_child_id: childId });
+            if (error || !data) { alert('Could not rotate the code. Please try again.'); return; }
+            const child = appData.children.find(c => c.id === childId);
+            if (child) child.shareCode = data;
+            saveData();
+            document.querySelector('.modal.active')?.remove();
+            showChildShareCode();
         }
 
         function skipAuth() {
