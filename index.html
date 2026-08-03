@@ -1494,6 +1494,17 @@
                     </div>
                     <div id="strokeScreenContent"></div>
                 </div>
+
+                <div class="card" id="emergencyInfoCard">
+                    <div class="card-header">
+                        <div class="card-title">🚨 Emergency Medical Info</div>
+                        <button class="btn btn-primary btn-small" onclick="showEditEmergencyInfo()">Edit</button>
+                    </div>
+                    <div style="font-size:12px;color:var(--text-light);margin-bottom:8px;">
+                        The facts an ER doctor will ask for. Included in the Doctor Report.
+                    </div>
+                    <div id="emergencyInfoContent"></div>
+                </div>
             </section>
 
             <!-- Emergency Section -->
@@ -2961,7 +2972,14 @@
                         <label class="input-label">Notes (optional)</label>
                         <textarea class="input-field" id="painNotes" placeholder="Any additional details..." rows="3"></textarea>
                     </div>
-                    
+
+                    <div class="input-group">
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                            <input type="checkbox" id="painRequiredER">
+                            <span style="font-size:13px;">Required an ER visit or hospital stay</span>
+                        </label>
+                    </div>
+
                     <button class="btn btn-primary btn-full" onclick="savePainEntry()">Save Pain Log</button>
                 </div>
             `;
@@ -3029,7 +3047,14 @@
                         <label class="input-label">Notes (optional)</label>
                         <textarea class="input-field" id="painNotes" placeholder="Any additional details..." rows="3"></textarea>
                     </div>
-                    
+
+                    <div class="input-group">
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                            <input type="checkbox" id="painRequiredER">
+                            <span style="font-size:13px;">Required an ER visit or hospital stay</span>
+                        </label>
+                    </div>
+
                     <button class="btn btn-primary btn-full" onclick="savePainEntry()">Save Pain Log</button>
                 </div>
             `;
@@ -3066,6 +3091,7 @@
                 temperature: temperature,
                 helped: helped,
                 notes: notes,
+                requiredER: document.getElementById('painRequiredER')?.checked || false,
                 resolved: false
             };
             
@@ -4475,6 +4501,7 @@
             renderTemperatureOverview();
             renderSymptomHistory();
             renderStrokeScreenCard();
+            renderEmergencyInfoCard();
             updateNotificationUI();
         }
 
@@ -5782,6 +5809,116 @@
             setTimeout(() => alert('✅ Stroke screen logged.'), 100);
         }
 
+        // ── EMERGENCY MEDICAL INFO ───────────────────────────────────────
+        // The facts an ER doctor asks for. Deliberately un-clinical: plain
+        // manually-entered values, no history, no trending, no interpretation.
+        // A null always renders as "Not recorded" — never a zero or blank.
+
+        function renderEmergencyInfoCard() {
+            const content = document.getElementById('emergencyInfoContent');
+            if (!content) return;
+            const child = getCurrentChild();
+            if (!child) { content.innerHTML = ''; return; }
+
+            const row = (label, value) => `
+                <div class="report-row">
+                    <span class="report-label">${label}</span>
+                    <span class="report-value" style="${value ? '' : 'color:var(--text-light);font-weight:500;'}">${value || 'Not recorded'}</span>
+                </div>`;
+
+            let transfusion = null;
+            if (child.lastTransfusionDate) {
+                transfusion = new Date(child.lastTransfusionDate).toLocaleDateString('en-US', { month:'long', day:'numeric', year:'numeric' });
+                if (child.lastTransfusionUnits) transfusion += ` · ${child.lastTransfusionUnits} unit${child.lastTransfusionUnits === 1 ? '' : 's'}`;
+            }
+
+            content.innerHTML =
+                row('Drug allergies', child.drugAllergies) +
+                row('Baseline hemoglobin', child.baselineHemoglobin ? `${child.baselineHemoglobin} g/dL` : null) +
+                row('Last transfusion', transfusion);
+        }
+
+        function showEditEmergencyInfo() {
+            const child = getCurrentChild();
+            if (!child) { alert('Select a child first.'); return; }
+
+            const modal = document.createElement('div');
+            modal.className = 'modal active';
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width:440px;">
+                    <div style="background:linear-gradient(135deg,var(--primary),var(--purple));padding:20px;border-radius:20px 20px 0 0;margin:-20px -20px 20px;">
+                        <button class="modal-close" onclick="this.closest('.modal').remove()" style="color:white;">×</button>
+                        <div style="color:white;font-size:18px;font-weight:800;">🚨 Emergency Medical Info</div>
+                        <div style="color:rgba(255,255,255,0.75);font-size:12px;margin-top:4px;">For ${child.name} · all fields optional</div>
+                    </div>
+
+                    <div class="input-group">
+                        <label class="input-label">Drug allergies &amp; reactions</label>
+                        <textarea class="input-field" id="emDrugAllergies" rows="3"
+                                  placeholder="Penicillin — hives; codeine — nausea">${child.drugAllergies || ''}</textarea>
+                        <p style="font-size:11px;color:var(--text-light);margin-top:4px;">
+                            Include the reaction, not just the drug — it matters as much in an ER.
+                        </p>
+                    </div>
+
+                    <div class="input-group">
+                        <label class="input-label">Baseline hemoglobin (g/dL)</label>
+                        <input type="number" class="input-field" id="emBaselineHgb" step="0.1" min="1" max="25"
+                               placeholder="8.5" value="${child.baselineHemoglobin ?? ''}">
+                        <p style="font-size:11px;color:var(--text-light);margin-top:4px;">
+                            The usual level <strong>when well</strong> — not during a crisis.
+                        </p>
+                    </div>
+
+                    <div class="input-group">
+                        <label class="input-label">Last transfusion date</label>
+                        <input type="date" class="input-field" id="emTransfusionDate"
+                               max="${new Date().toISOString().split('T')[0]}" value="${child.lastTransfusionDate || ''}">
+                    </div>
+
+                    <div class="input-group">
+                        <label class="input-label">Units received (optional)</label>
+                        <input type="number" class="input-field" id="emTransfusionUnits" min="1" max="20"
+                               placeholder="2" value="${child.lastTransfusionUnits ?? ''}">
+                    </div>
+
+                    <button class="btn btn-primary btn-full" onclick="saveEmergencyInfo()">Save</button>
+                </div>`;
+            document.body.appendChild(modal);
+        }
+
+        function saveEmergencyInfo() {
+            const child = getCurrentChild();
+            if (!child) return;
+
+            const allergies = document.getElementById('emDrugAllergies').value.trim();
+            const hgbRaw    = document.getElementById('emBaselineHgb').value.trim();
+            const dateRaw   = document.getElementById('emTransfusionDate').value;
+            const unitsRaw  = document.getElementById('emTransfusionUnits').value.trim();
+
+            const hgb = hgbRaw === '' ? null : parseFloat(hgbRaw);
+            if (hgb !== null && (isNaN(hgb) || hgb < 1 || hgb > 25)) {
+                alert('Please enter a baseline hemoglobin between 1 and 25 g/dL, or leave it blank.'); return;
+            }
+            const units = unitsRaw === '' ? null : parseInt(unitsRaw, 10);
+            if (units !== null && (isNaN(units) || units < 1 || units > 20)) {
+                alert('Please enter units between 1 and 20, or leave it blank.'); return;
+            }
+
+            // Empty stays null so reports read "Not recorded", never 0 or blank.
+            child.drugAllergies         = allergies || null;
+            child.baselineHemoglobin    = hgb;
+            child.lastTransfusionDate   = dateRaw || null;
+            child.lastTransfusionUnits  = units;
+
+            saveData();
+            getCurrentFamilyId().then(fid => { if (fid) cloudSync(() => _pushChild(child, fid)); });
+
+            document.querySelector('.modal.active')?.remove();
+            renderEmergencyInfoCard();
+            setTimeout(() => alert('✅ Emergency medical info saved.'), 100);
+        }
+
         function showAddContact(editId = null) {
             const existing = editId ? appData.contacts.find(c => c.id === editId) : null;
 
@@ -6258,6 +6395,15 @@
             // Filter data to last 90 days
             const painLogs = (child.painLog || []).filter(l => new Date(l.date) >= cutoff);
             const tempLogs = (child.temperatureLog || []).filter(l => new Date(l.date) >= cutoff);
+
+            // ER-visit count. Computed independently of painLogs above, which
+            // reads l.date — a field pain entries don't have (they use
+            // startTime), so that filter yields nothing. See PR notes.
+            const erVisits = (child.painLog || []).filter(l => {
+                if (!l.requiredER) return false;
+                const when = new Date(l.startTime || l.timestamp || l.date);
+                return !isNaN(when) && when >= cutoff;
+            }).length;
             const meds = appData.medications ? appData.medications.filter(m => m.childId === child.id) : (child.medications || []);
 
             // Calculate stats
@@ -6313,12 +6459,31 @@
                             <span class="report-value">${child.weight ? child.weight + ' lbs' : 'Not recorded'}</span>
                         </div>
                         <div class="report-row">
+                            <span class="report-label">Drug Allergies</span>
+                            <span class="report-value">${child.drugAllergies || 'Not recorded'}</span>
+                        </div>
+                        <div class="report-row">
+                            <span class="report-label">Baseline Hemoglobin</span>
+                            <span class="report-value">${child.baselineHemoglobin ? child.baselineHemoglobin + ' g/dL' : 'Not recorded'}</span>
+                        </div>
+                        <div class="report-row">
+                            <span class="report-label">Last Transfusion</span>
+                            <span class="report-value">${child.lastTransfusionDate
+                                ? new Date(child.lastTransfusionDate).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'}) +
+                                  (child.lastTransfusionUnits ? ` · ${child.lastTransfusionUnits} unit${child.lastTransfusionUnits === 1 ? '' : 's'}` : '')
+                                : 'Not recorded'}</span>
+                        </div>
+                        <div class="report-row">
                             <span class="report-label">Report Generated</span>
                             <span class="report-value">${reportDate}</span>
                         </div>
 
                         <!-- Pain Summary -->
                         <div class="report-section-title">Pain Episodes (Last 90 Days)</div>
+                        <div class="report-row">
+                            <span class="report-label">Crisis Admissions (ER / hospital)</span>
+                            <span class="report-value ${erVisits > 0 ? 'report-fever' : ''}">${erVisits}</span>
+                        </div>
                         ${painLogs.length === 0
                             ? `<div style="font-size:13px;color:var(--text-light);padding:8px 0;">No pain episodes logged in this period. ✅</div>`
                             : `
@@ -6450,6 +6615,15 @@
             const meds = child.medications || [];
             const contacts = appData.contacts || [];
             const fevers = tempLogs.filter(t => parseFloat(t.temp) >= 101.3);
+            const erVisits = (child.painLog || []).filter(l => {
+                if (!l.requiredER) return false;
+                const when = new Date(l.startTime || l.timestamp || l.date);
+                return !isNaN(when) && when >= cutoff;
+            }).length;
+            const transfusionText = child.lastTransfusionDate
+                ? new Date(child.lastTransfusionDate).toLocaleDateString() +
+                  (child.lastTransfusionUnits ? ` (${child.lastTransfusionUnits} unit${child.lastTransfusionUnits === 1 ? '' : 's'})` : '')
+                : 'Not recorded';
 
             // Build clean text report
             const lines = [
@@ -6466,8 +6640,12 @@
                 `Age:           ${child.displayAge || 'Not provided'}`,
                 `Disease Type:  ${child.diseaseType || 'Not specified'}`,
                 `Weight:        ${child.weight ? child.weight + ' lbs' : 'Not recorded'}`,
+                `Drug Allergies: ${child.drugAllergies || 'Not recorded'}`,
+                `Baseline Hgb:  ${child.baselineHemoglobin ? child.baselineHemoglobin + ' g/dL' : 'Not recorded'}`,
+                `Last Transfusion: ${transfusionText}`,
                 '',
                 '── PAIN EPISODES ────────────────────────',
+                `Crisis Admissions (ER/hospital): ${erVisits}`,
                 `Total Episodes: ${painLogs.length}`,
                 ...(painLogs.length > 0 ? [
                     `Avg Severity:   ${(painLogs.reduce((a,b)=>a+(b.severity||0),0)/painLogs.length).toFixed(1)} / 5`,
@@ -6592,6 +6770,10 @@
                             <span class="report-label">Weight</span>
                             <span class="report-value">${child.weight ? child.weight + ' lbs' : 'Not recorded'}</span>
                         </div>
+                        <div class="report-row">
+                            <span class="report-label">Drug Allergies</span>
+                            <span class="report-value" style="${child.drugAllergies ? 'color:var(--emergency);' : ''}">${child.drugAllergies || 'None recorded'}</span>
+                        </div>
 
                         <!-- 2. Emergency Action Plan -->
                         <div class="report-section-title" style="color:var(--emergency);">Emergency Action Plan</div>
@@ -6702,6 +6884,7 @@
                 `DOB:       ${child.birthDate ? new Date(child.birthDate).toLocaleDateString() : 'Not provided'}`,
                 `Age:       ${child.displayAge || 'Not provided'}`,
                 `Condition: ${child.diseaseType || 'Not specified'} (Sickle Cell Disease)`,
+                `Drug Allergies: ${child.drugAllergies || 'None recorded'}`,
                 `Weight:    ${child.weight ? child.weight + ' lbs' : 'Not recorded'}`,
                 '',
                 '── EMERGENCY ACTION PLAN ─────────────────',
@@ -6851,6 +7034,10 @@
                         daysPainFree: c.days_pain_free || 0,
                         lastStrokeScreen: c.last_stroke_screen || null,
                         strokeScreenResult: c.stroke_screen_result || null,
+                        drugAllergies: c.drug_allergies || null,
+                        baselineHemoglobin: c.baseline_hemoglobin ?? null,
+                        lastTransfusionDate: c.last_transfusion_date || null,
+                        lastTransfusionUnits: c.last_transfusion_units ?? null,
                         waterIntake: 0,
                         todayMeds: 0,
                         medications: childMeds.map(m => ({
@@ -6874,6 +7061,7 @@
                             temperature: p.temperature,
                             helped: p.what_helped || [],
                             notes: p.notes,
+                            requiredER: p.required_er_visit || false,
                             startTime: p.logged_at,
                             resolved: false
                         })),
@@ -6954,7 +7142,11 @@
                 is_active: true,
                 self_tracking: childData.selfTracking || false,
                 last_stroke_screen: childData.lastStrokeScreen || null,
-                stroke_screen_result: childData.strokeScreenResult || null
+                stroke_screen_result: childData.strokeScreenResult || null,
+                drug_allergies: childData.drugAllergies || null,
+                baseline_hemoglobin: childData.baselineHemoglobin ?? null,
+                last_transfusion_date: childData.lastTransfusionDate || null,
+                last_transfusion_units: childData.lastTransfusionUnits ?? null
             };
             if (isUUID) payload.id = childData.id;
             const { data } = await sb.from('children').upsert(payload, { onConflict: 'id' }).select().single();
@@ -6991,6 +7183,7 @@
                 locations: entry.location ? entry.location.split(',').map(s => s.trim()).filter(Boolean) : [],
                 what_helped: entry.helped || [],
                 notes: entry.notes || null,
+                required_er_visit: entry.requiredER || false,
                 logged_at: entry.startTime || new Date().toISOString()
             });
         }
