@@ -6384,6 +6384,53 @@
         
         // ── DOCTOR REPORT ────────────────────────────────────────────────
 
+        // The report used to read field names the entries never had
+        // (l.date/l.severity/l.locations/l.whatHelped on pain, t.date/t.temp on
+        // temps), so `new Date(undefined)` made every 90-day filter false and
+        // the report always rendered empty. These normalizers are the single
+        // place field resolution happens, and tolerate both the locally-created
+        // shape and the syncAllFromCloud shape.
+        function _normalizePainLog(l) {
+            const when = new Date(l.startTime || l.timestamp || l.date);
+            return {
+                when,
+                valid: !isNaN(when),
+                severity: Number(l.level ?? l.severity ?? 0),
+                locations: Array.isArray(l.locations)
+                    ? l.locations
+                    : (l.location ? String(l.location).split(',').map(s => s.trim()).filter(Boolean) : []),
+                helped: Array.isArray(l.helped)
+                    ? l.helped.join(', ')
+                    : (l.helped || l.whatHelped || ''),
+                notes: l.notes || '',
+                requiredER: !!l.requiredER
+            };
+        }
+
+        function _normalizeTempLog(t) {
+            const when = new Date(t.timestamp || t.loggedAt || t.date);
+            const temp = parseFloat(t.temperature ?? t.temp);
+            return { when, valid: !isNaN(when) && !isNaN(temp), temp };
+        }
+
+        // Shared 90-day slice used by both the modal and the .txt download so
+        // the two can never disagree again.
+        function _doctorReportData(child, cutoff) {
+            const pain = (child.painLog || []).map(_normalizePainLog)
+                .filter(l => l.valid && l.when >= cutoff)
+                .sort((a, b) => b.when - a.when);
+            const temps = (child.temperatureLog || []).map(_normalizeTempLog)
+                .filter(t => t.valid && t.when >= cutoff)
+                .sort((a, b) => b.when - a.when);
+            return {
+                pain,
+                temps,
+                fevers: temps.filter(t => t.temp >= 101.3),
+                emergencyTemps: temps.filter(t => t.temp >= 104),
+                erVisits: pain.filter(l => l.requiredER).length
+            };
+        }
+
         function showDoctorReport() {
             const child = getCurrentChild();
             if (!child) return;
@@ -6392,25 +6439,13 @@
             const cutoff = new Date();
             cutoff.setDate(cutoff.getDate() - 90);
 
-            // Filter data to last 90 days
-            const painLogs = (child.painLog || []).filter(l => new Date(l.date) >= cutoff);
-            const tempLogs = (child.temperatureLog || []).filter(l => new Date(l.date) >= cutoff);
-
-            // ER-visit count. Computed independently of painLogs above, which
-            // reads l.date — a field pain entries don't have (they use
-            // startTime), so that filter yields nothing. See PR notes.
-            const erVisits = (child.painLog || []).filter(l => {
-                if (!l.requiredER) return false;
-                const when = new Date(l.startTime || l.timestamp || l.date);
-                return !isNaN(when) && when >= cutoff;
-            }).length;
+            // Filter data to last 90 days (shared with the .txt download)
+            const { pain: painLogs, temps: tempLogs, fevers, emergencyTemps, erVisits }
+                = _doctorReportData(child, cutoff);
             const meds = appData.medications ? appData.medications.filter(m => m.childId === child.id) : (child.medications || []);
 
-            // Calculate stats
-            const fevers = tempLogs.filter(t => parseFloat(t.temp) >= 101.3);
-            const emergencyTemps = tempLogs.filter(t => parseFloat(t.temp) >= 104);
             const avgSeverity = painLogs.length > 0
-                ? (painLogs.reduce((a, b) => a + (b.severity || 0), 0) / painLogs.length).toFixed(1)
+                ? (painLogs.reduce((a, b) => a + b.severity, 0) / painLogs.length).toFixed(1)
                 : 'None';
             const criticalMeds = meds.filter(m => m.critical || m.isCritical);
             const contacts = appData.contacts || [];
@@ -6497,18 +6532,18 @@
                             </div>
                             <div class="report-row">
                                 <span class="report-label">Highest Severity</span>
-                                <span class="report-value ${parseInt(avgSeverity) >= 4 ? 'report-fever' : ''}">${Math.max(...painLogs.map(l => l.severity || 0))} / 5</span>
+                                <span class="report-value ${parseFloat(avgSeverity) >= 4 ? 'report-fever' : ''}">${Math.max(...painLogs.map(l => l.severity))} / 5</span>
                             </div>
                             <div style="margin-top:10px;">
                                 ${painLogs.slice(0,8).map(log => `
                                     <div style="background:var(--bg);border-radius:10px;padding:10px 12px;margin-bottom:6px;">
                                         <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-                                            <span style="font-size:12px;font-weight:700;font-family:'Sora',sans-serif;">${new Date(log.date).toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span>
+                                            <span style="font-size:12px;font-weight:700;font-family:'Sora',sans-serif;">${log.when.toLocaleDateString('en-US',{month:'short',day:'numeric'})}${log.requiredER ? ' · <span style="color:var(--emergency);">ER</span>' : ''}</span>
                                             <span style="font-size:12px;font-weight:700;color:${log.severity >= 4 ? 'var(--emergency)' : log.severity >= 3 ? 'var(--warning)' : 'var(--success)'};">Severity ${log.severity}/5</span>
                                         </div>
-                                        ${log.locations && log.locations.length > 0
+                                        ${log.locations.length > 0
                                             ? `<div style="margin-bottom:4px;">${log.locations.map(loc => `<span class="pain-chip">${loc}</span>`).join('')}</div>` : ''}
-                                        ${log.whatHelped ? `<div style="font-size:11px;color:var(--text-light);">Helped: ${log.whatHelped}</div>` : ''}
+                                        ${log.helped ? `<div style="font-size:11px;color:var(--text-light);">Helped: ${log.helped}</div>` : ''}
                                     </div>
                                 `).join('')}
                                 ${painLogs.length > 8 ? `<div style="font-size:12px;color:var(--text-light);text-align:center;padding:4px;">+ ${painLogs.length - 8} more episodes in full export</div>` : ''}
@@ -6535,15 +6570,15 @@
                             </div>` : ''}
                             <div class="report-row">
                                 <span class="report-label">Highest Temp</span>
-                                <span class="report-value ${Math.max(...tempLogs.map(t => parseFloat(t.temp)||0)) >= 101.3 ? 'report-fever' : ''}">${Math.max(...tempLogs.map(t => parseFloat(t.temp)||0)).toFixed(1)}°F</span>
+                                <span class="report-value ${Math.max(...tempLogs.map(t => t.temp)) >= 101.3 ? 'report-fever' : ''}">${Math.max(...tempLogs.map(t => t.temp)).toFixed(1)}°F</span>
                             </div>
                             ${fevers.length > 0 ? `
                             <div style="margin-top:10px;">
                                 <div style="font-size:11px;font-weight:700;color:var(--emergency);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;">Fever Events</div>
                                 ${fevers.slice(0,5).map(t => `
                                     <div style="background:var(--emergency-light);border-radius:10px;padding:8px 12px;margin-bottom:4px;display:flex;justify-content:space-between;">
-                                        <span style="font-size:12px;font-weight:700;">${new Date(t.date).toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span>
-                                        <span style="font-size:12px;font-weight:700;color:var(--emergency);">${parseFloat(t.temp).toFixed(1)}°F</span>
+                                        <span style="font-size:12px;font-weight:700;">${t.when.toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span>
+                                        <span style="font-size:12px;font-weight:700;color:var(--emergency);">${t.temp.toFixed(1)}°F</span>
                                     </div>
                                 `).join('')}
                             </div>` : ''}`
@@ -6610,16 +6645,11 @@
             const cutoff = new Date();
             cutoff.setDate(cutoff.getDate() - 90);
 
-            const painLogs = (child.painLog || []).filter(l => new Date(l.date) >= cutoff);
-            const tempLogs = (child.temperatureLog || []).filter(l => new Date(l.date) >= cutoff);
+            // Same 90-day slice the modal uses — they can't disagree.
+            const { pain: painLogs, temps: tempLogs, fevers, erVisits }
+                = _doctorReportData(child, cutoff);
             const meds = child.medications || [];
             const contacts = appData.contacts || [];
-            const fevers = tempLogs.filter(t => parseFloat(t.temp) >= 101.3);
-            const erVisits = (child.painLog || []).filter(l => {
-                if (!l.requiredER) return false;
-                const when = new Date(l.startTime || l.timestamp || l.date);
-                return !isNaN(when) && when >= cutoff;
-            }).length;
             const transfusionText = child.lastTransfusionDate
                 ? new Date(child.lastTransfusionDate).toLocaleDateString() +
                   (child.lastTransfusionUnits ? ` (${child.lastTransfusionUnits} unit${child.lastTransfusionUnits === 1 ? '' : 's'})` : '')
@@ -6648,11 +6678,11 @@
                 `Crisis Admissions (ER/hospital): ${erVisits}`,
                 `Total Episodes: ${painLogs.length}`,
                 ...(painLogs.length > 0 ? [
-                    `Avg Severity:   ${(painLogs.reduce((a,b)=>a+(b.severity||0),0)/painLogs.length).toFixed(1)} / 5`,
-                    `Highest:        ${Math.max(...painLogs.map(l=>l.severity||0))} / 5`,
+                    `Avg Severity:   ${(painLogs.reduce((a,b)=>a+b.severity,0)/painLogs.length).toFixed(1)} / 5`,
+                    `Highest:        ${Math.max(...painLogs.map(l=>l.severity))} / 5`,
                     '',
                     ...painLogs.map(l =>
-                        `  ${new Date(l.date).toLocaleDateString()} | Severity ${l.severity}/5 | ${(l.locations||[]).join(', ')}${l.whatHelped ? ' | Helped: '+l.whatHelped : ''}`
+                        `  ${l.when.toLocaleDateString()} | Severity ${l.severity}/5 | ${l.locations.join(', ')}${l.helped ? ' | Helped: '+l.helped : ''}${l.requiredER ? ' | ER VISIT' : ''}`
                     )
                 ] : ['No pain episodes in this period.']),
                 '',
@@ -6660,10 +6690,10 @@
                 `Total Readings: ${tempLogs.length}`,
                 `Fevers ≥101.3°F: ${fevers.length}`,
                 ...(tempLogs.length > 0 ? [
-                    `Highest Temp:   ${Math.max(...tempLogs.map(t=>parseFloat(t.temp)||0)).toFixed(1)}°F`,
+                    `Highest Temp:   ${Math.max(...tempLogs.map(t=>t.temp)).toFixed(1)}°F`,
                     '',
                     ...fevers.map(t =>
-                        `  🚨 FEVER: ${new Date(t.date).toLocaleDateString()} | ${parseFloat(t.temp).toFixed(1)}°F`
+                        `  🚨 FEVER: ${t.when.toLocaleDateString()} | ${t.temp.toFixed(1)}°F`
                     )
                 ] : []),
                 '',
