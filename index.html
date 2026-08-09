@@ -7098,12 +7098,19 @@
                 return;
             }
 
-            // Fetch user profile from DB
-            const { data: profile } = await sb.from('users').select('*').eq('auth_id', data.user.id).single();
-            const { data: family } = profile ? await sb.from('families').select('*').eq('id', profile.family_id).single() : { data: null };
+            // First login after email confirmation is where family setup
+            // actually happens — signup couldn't do it without a session.
+            // No-ops for accounts that are already set up.
+            const prov = await ensureUserProvisioned(data.user);
+            if (!prov.profile) {
+                alert('Signed in, but we couldn\'t finish setting up your family. Please try signing in again, or contact support if it keeps happening.');
+                return;
+            }
+            const profile = prov.profile;
+            const { data: family } = await sb.from('families').select('*').eq('id', profile.family_id).maybeSingle();
 
             familyAuth.isLoggedIn = true;
-            familyAuth.currentUser = { id: data.user.id, name: profile?.full_name || email, email, role: profile?.role || 'parent', familyCode: family?.family_code, familyId: profile?.family_id };
+            familyAuth.currentUser = { id: data.user.id, name: profile.full_name || email, email, role: profile.role || 'parent', familyCode: family?.family_code, familyId: profile.family_id, isPrimary: profile.is_primary };
             familyAuth.familyCode = family?.family_code;
             localStorage.setItem('ss_auth', JSON.stringify(familyAuth));
             localStorage.setItem('ss_auth_dismissed', 'true');
@@ -7111,7 +7118,57 @@
             closeAuthScreen();
             await syncAllFromCloud();
             updateFamilyMembersPreview();
-            alert(`Welcome back! 💙`);
+
+            if (prov.created) {
+                trackFamilyAccountCreated();
+                alert(`Welcome, ${profile.full_name}! 💙\n\nYour account is all set up.${family?.family_code ? `\n\nYour Family Code: ${family.family_code}` : ''}`);
+            } else {
+                alert(`Welcome back! 💙`);
+            }
+        }
+
+        // "Confirm email" is enabled, so sb.auth.signUp() returns session: null
+        // until the person clicks the link in their email. Any authenticated
+        // write attempted before then runs as `anon` and is rejected by RLS
+        // (families_insert is TO authenticated; users_insert_self requires
+        // auth_id = auth.uid(), which is NULL without a session).
+        //
+        // So: signup only creates the auth user, and the name/role/join-intent
+        // ride along in user_metadata. Provisioning happens at first login,
+        // once a real session exists. Metadata is used rather than localStorage
+        // deliberately — someone can confirm their email on a different device
+        // than they signed up on, and localStorage would lose the name.
+        // Provisioning goes through a SECURITY DEFINER function rather than
+        // direct inserts. Two reasons it can't be done client-side:
+        //   1. families.insert().select() is INSERT ... RETURNING, and RETURNING
+        //      is checked against families_select — which requires you to
+        //      already be a member of the family you're creating.
+        //   2. The family + users rows need to land atomically, or a failure
+        //      halfway leaves an orphaned family.
+        // Safe to call on every login; it no-ops once a users row exists.
+        async function ensureUserProvisioned(authUser) {
+            const meta = authUser.user_metadata || {};
+            const { data, error } = await sb.rpc('provision_current_user', {
+                p_full_name: meta.full_name || null,
+                p_role: meta.role || 'parent',
+                p_join_code: meta.pending_family_code || null
+            });
+            if (error || !data || data.length === 0) {
+                console.warn('[SickleStrong] provisioning failed', error);
+                return { profile: null, created: false, error };
+            }
+            const row = data[0];
+            return {
+                profile: {
+                    auth_id: authUser.id,
+                    family_id: row.out_family_id,
+                    full_name: row.out_full_name,
+                    role: meta.role || 'parent',
+                    is_primary: !meta.pending_family_code
+                },
+                familyCode: row.out_family_code,
+                created: row.out_created
+            };
         }
 
         async function handleSignup() {
@@ -7127,32 +7184,33 @@
                 alert('Password must be at least 8 characters.'); return;
             }
 
-            const { data, error } = await sb.auth.signUp({ email, password });
+            // Name and role ride along on the auth user so they survive until
+            // the confirmation round-trip completes.
+            const { data, error } = await sb.auth.signUp({
+                email, password,
+                options: { data: { full_name: name, role } }
+            });
             if (error) {
                 alert('Sign up failed: ' + error.message); return;
             }
 
-            const familyCode = generateFamilyCode();
-
-            // Create family record
-            const { data: family, error: famErr } = await sb.from('families').insert({
-                family_code: familyCode,
-                plan: 'beta'
-            }).select().single();
-
-            if (famErr || !family) {
-                alert('Account created but family setup failed. Please contact support.'); return;
+            // No session yet = email confirmation pending. Do NOT attempt any
+            // authenticated write here; it would be rejected and surface as the
+            // misleading "family setup failed" message.
+            if (!data.session) {
+                closeAuthScreen();
+                alert(`Almost there, ${name}! 💙\n\nWe sent a confirmation link to ${email}.\n\nOpen it to confirm your account, then come back and sign in — we'll finish setting up your family then.`);
+                return;
             }
 
-            // Create user profile
-            await sb.from('users').insert({
-                auth_id: data.user.id,
-                family_id: family.id,
-                full_name: name,
-                email,
-                role,
-                is_primary: true
-            });
+            // Confirmation not required (or later disabled): provision now.
+            const prov = await ensureUserProvisioned(data.user);
+            if (!prov.profile) {
+                alert('Account created, but family setup failed. Please sign in again and we\'ll finish setting it up.');
+                return;
+            }
+            const familyCode = prov.familyCode;
+            const family = { id: prov.profile.family_id };
 
             familyAuth.isLoggedIn = true;
             familyAuth.currentUser = { id: data.user.id, name, email, role, familyCode, familyId: family.id, isPrimary: true };
@@ -7173,10 +7231,14 @@
                 alert('Please enter a valid family code (e.g. STRONG-1234).'); return;
             }
 
-            const { data: family } = await sb.from('families').select('*').eq('family_code', code).single();
-            if (!family) {
+            // families_select requires you to already be a member, so a plain
+            // .select() by code can never resolve for a joiner. Use the
+            // DEFINER lookup instead.
+            const { data: found } = await sb.rpc('lookup_family_by_code', { p_code: code });
+            if (!found || found.length === 0) {
                 alert('Family code not found. Please check the code and try again.'); return;
             }
+            const family = { id: found[0].out_family_id, family_code: found[0].out_family_code };
 
             const name = prompt('Your name:');
             const email = prompt('Your email:');
@@ -7184,20 +7246,28 @@
 
             if (!name || !email || !password) return;
 
-            const { data, error } = await sb.auth.signUp({ email, password });
+            // Carry the join intent on the auth user so first login can
+            // complete it — same null-session constraint as handleSignup.
+            const { data, error } = await sb.auth.signUp({
+                email, password,
+                options: { data: { full_name: name, role: 'caregiver', pending_family_code: family.family_code } }
+            });
             if (error) { alert('Sign up failed: ' + error.message); return; }
 
-            await sb.from('users').insert({
-                auth_id: data.user.id,
-                family_id: family.id,
-                full_name: name,
-                email,
-                role: 'caregiver',
-                is_primary: false
-            });
+            if (!data.session) {
+                closeAuthScreen();
+                alert(`Almost there, ${name}! 💙\n\nWe sent a confirmation link to ${email}.\n\nOpen it to confirm your account, then sign in — you'll be connected to the family automatically.`);
+                return;
+            }
+
+            const prov = await ensureUserProvisioned(data.user);
+            if (!prov.profile) {
+                alert('Account created, but joining the family failed. Please sign in again to finish.');
+                return;
+            }
 
             familyAuth.isLoggedIn = true;
-            familyAuth.currentUser = { id: data.user.id, name, email, role: 'caregiver', familyCode: code, familyId: family.id, isPrimary: false };
+            familyAuth.currentUser = { id: data.user.id, name, email, role: 'caregiver', familyCode: code, familyId: prov.profile.family_id, isPrimary: false };
             familyAuth.familyCode = code;
             localStorage.setItem('ss_auth', JSON.stringify(familyAuth));
             localStorage.setItem('ss_auth_dismissed', 'true');
@@ -7671,6 +7741,10 @@
             if (session) {
                 familyAuth.isLoggedIn = true;
                 localStorage.setItem('ss_auth_dismissed', 'true');
+                // Clicking the confirmation link can land here with a live
+                // session without ever passing through handleLogin, so this
+                // path has to provision too. No-op once set up.
+                await ensureUserProvisioned(session.user);
                 await syncAllFromCloud();
             }
 
