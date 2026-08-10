@@ -7121,16 +7121,22 @@
                 return;
             }
 
-            // First login after confirming: redeem the child code they signed
-            // up with, now that a session exists. No-op if there isn't one.
+            // First login after confirming. Redemption must run BEFORE
+            // provisioning: redeem_child_code creates the users row tied to the
+            // sharer's family, so provisioning then correctly no-ops instead of
+            // creating a second, separate family for this caregiver.
             const redeemedChild = await redeemPendingChildCode(data.user);
 
-            // Fetch user profile from DB
-            const { data: profile } = await sb.from('users').select('*').eq('auth_id', data.user.id).maybeSingle();
-            const { data: family } = profile ? await sb.from('families').select('*').eq('id', profile.family_id).maybeSingle() : { data: null };
+            const prov = await ensureUserProvisioned(data.user);
+            if (!prov.profile) {
+                alert('Signed in, but we couldn\'t finish setting up your account. Please try signing in again, or contact support if it keeps happening.');
+                return;
+            }
+            const profile = prov.profile;
+            const { data: family } = await sb.from('families').select('*').eq('id', profile.family_id).maybeSingle();
 
             familyAuth.isLoggedIn = true;
-            familyAuth.currentUser = { id: data.user.id, name: profile?.full_name || email, email, role: profile?.role || 'parent', familyCode: family?.family_code, familyId: profile?.family_id };
+            familyAuth.currentUser = { id: data.user.id, name: profile.full_name || email, email, role: profile.role || 'parent', familyCode: family?.family_code, familyId: profile.family_id, isPrimary: profile.is_primary };
             familyAuth.familyCode = family?.family_code;
             localStorage.setItem('ss_auth', JSON.stringify(familyAuth));
             localStorage.setItem('ss_auth_dismissed', 'true');
@@ -7138,9 +7144,60 @@
             closeAuthScreen();
             await syncAllFromCloud();
             updateFamilyMembersPreview();
-            alert(redeemedChild
-                ? `Welcome! 💙\n\nYou now have access to ${redeemedChild}.`
-                : `Welcome back! 💙`);
+            if (redeemedChild) {
+                trackFamilyMemberJoined();
+                alert(`Welcome! 💙\n\nYou now have access to ${redeemedChild}.`);
+            } else if (prov.created) {
+                trackFamilyAccountCreated();
+                alert(`Welcome, ${profile.full_name}! 💙\n\nYour account is all set up.${family?.family_code ? `\n\nYour Family Code: ${family.family_code}` : ''}`);
+            } else {
+                alert(`Welcome back! 💙`);
+            }
+        }
+
+        // "Confirm email" is enabled, so sb.auth.signUp() returns session: null
+        // until the person clicks the link in their email. Any authenticated
+        // write attempted before then runs as `anon` and is rejected by RLS
+        // (families_insert is TO authenticated; users_insert_self requires
+        // auth_id = auth.uid(), which is NULL without a session).
+        //
+        // So: signup only creates the auth user, and the name/role/join-intent
+        // ride along in user_metadata. Provisioning happens at first login,
+        // once a real session exists. Metadata is used rather than localStorage
+        // deliberately — someone can confirm their email on a different device
+        // than they signed up on, and localStorage would lose the name.
+        //
+        // Provisioning goes through a SECURITY DEFINER function rather than
+        // direct inserts. Two reasons it can't be done client-side:
+        //   1. families.insert().select() is INSERT ... RETURNING, and RETURNING
+        //      is checked against families_select — which requires you to
+        //      already be a member of the family you're creating.
+        //   2. The family + users rows need to land atomically, or a failure
+        //      halfway leaves an orphaned family.
+        // Safe to call on every login; it no-ops once a users row exists.
+        async function ensureUserProvisioned(authUser) {
+            const meta = authUser.user_metadata || {};
+            const { data, error } = await sb.rpc('provision_current_user', {
+                p_full_name: meta.full_name || null,
+                p_role: meta.role || 'parent',
+                p_join_code: meta.pending_family_code || null
+            });
+            if (error || !data || data.length === 0) {
+                console.warn('[SickleStrong] provisioning failed', error);
+                return { profile: null, created: false, error };
+            }
+            const row = data[0];
+            return {
+                profile: {
+                    auth_id: authUser.id,
+                    family_id: row.out_family_id,
+                    full_name: row.out_full_name,
+                    role: meta.role || 'parent',
+                    is_primary: !meta.pending_family_code
+                },
+                familyCode: row.out_family_code,
+                created: row.out_created
+            };
         }
 
         async function handleSignup() {
@@ -7156,32 +7213,33 @@
                 alert('Password must be at least 8 characters.'); return;
             }
 
-            const { data, error } = await sb.auth.signUp({ email, password });
+            // Name and role ride along on the auth user so they survive until
+            // the confirmation round-trip completes.
+            const { data, error } = await sb.auth.signUp({
+                email, password,
+                options: { data: { full_name: name, role } }
+            });
             if (error) {
                 alert('Sign up failed: ' + error.message); return;
             }
 
-            const familyCode = generateFamilyCode();
-
-            // Create family record
-            const { data: family, error: famErr } = await sb.from('families').insert({
-                family_code: familyCode,
-                plan: 'beta'
-            }).select().single();
-
-            if (famErr || !family) {
-                alert('Account created but family setup failed. Please contact support.'); return;
+            // No session yet = email confirmation pending. Do NOT attempt any
+            // authenticated write here; it would be rejected and surface as the
+            // misleading "family setup failed" message.
+            if (!data.session) {
+                closeAuthScreen();
+                alert(`Almost there, ${name}! 💙\n\nWe sent a confirmation link to ${email}.\n\nOpen it to confirm your account, then come back and sign in — we'll finish setting up your family then.`);
+                return;
             }
 
-            // Create user profile
-            await sb.from('users').insert({
-                auth_id: data.user.id,
-                family_id: family.id,
-                full_name: name,
-                email,
-                role,
-                is_primary: true
-            });
+            // Confirmation not required (or later disabled): provision now.
+            const prov = await ensureUserProvisioned(data.user);
+            if (!prov.profile) {
+                alert('Account created, but family setup failed. Please sign in again and we\'ll finish setting it up.');
+                return;
+            }
+            const familyCode = prov.familyCode;
+            const family = { id: prov.profile.family_id };
 
             familyAuth.isLoggedIn = true;
             familyAuth.currentUser = { id: data.user.id, name, email, role, familyCode, familyId: family.id, isPrimary: true };
@@ -7253,14 +7311,13 @@
             }
 
             // Session already active (confirmation disabled): redeem now.
-            const redeemedName = await redeemPendingChildCode(data.user, code);
-            if (!redeemedName) {
+            const childName = await redeemPendingChildCode(data.user, code);
+            if (!childName) {
                 alert('That child code is invalid or has reached its 5-caregiver limit. Please check with the person who shared it.');
                 return;
             }
-            const childName = redeemedName;
 
-            // Set the display name on the profile the function just created.
+            // Set the display name on the profile the redeem function created.
             await sb.from('users').update({ full_name: name }).eq('auth_id', data.user.id);
 
             familyAuth.isLoggedIn = true;
@@ -7776,9 +7833,13 @@
             if (session) {
                 familyAuth.isLoggedIn = true;
                 localStorage.setItem('ss_auth_dismissed', 'true');
-                // Confirmation links can land here with a live session without
-                // passing through handleLogin, so redeem here too.
+                // Clicking the confirmation link can land here with a live
+                // session without ever passing through handleLogin, so this
+                // path must redeem and provision too. Redeem first, so a
+                // caregiver joins the sharer's family instead of getting a new
+                // one. Both no-op once the account is set up.
                 await redeemPendingChildCode(session.user);
+                await ensureUserProvisioned(session.user);
                 await syncAllFromCloud();
             }
 
