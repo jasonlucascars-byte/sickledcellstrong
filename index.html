@@ -669,6 +669,27 @@
             color: var(--text);
         }
 
+        /* Password show/hide toggle */
+        .password-wrap { position: relative; }
+        .password-wrap .input-field { padding-right: 46px; }
+        .password-toggle {
+            position: absolute;
+            right: 6px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            line-height: 1;
+            padding: 8px;
+            border-radius: 10px;
+            opacity: 0.55;
+            transition: opacity 0.2s ease, background 0.2s ease;
+        }
+        .password-toggle:hover { opacity: 1; background: var(--bg); }
+        .password-toggle:focus-visible { outline: 2px solid var(--primary); opacity: 1; }
+
         .input-field:focus {
             outline: none;
             border-color: var(--primary);
@@ -1376,6 +1397,23 @@
                     </div>
                 </div>
 
+                <!-- Share SickleStrong -->
+                <div class="card" style="margin-bottom:14px;">
+                    <div class="card-header" style="margin-bottom:10px;">
+                        <div>
+                            <div class="card-title" style="display:flex;align-items:center;gap:8px;">
+                                <span style="font-size:20px;">💙</span>
+                                <span>Share SickleStrong</span>
+                            </div>
+                            <div style="font-size:12px;color:var(--text-light);margin-top:3px;">Know a family who could use this?</div>
+                        </div>
+                        <button class="btn btn-primary btn-small" onclick="shareSickleStrong()">Share</button>
+                    </div>
+                    <div style="font-size:12px;color:var(--text-light);line-height:1.5;">
+                        No app store needed — they just open the link and add it to their home screen.
+                    </div>
+                </div>
+
                 <!-- Temperature Overview (All Children) -->
                 <div class="card" id="tempOverviewCard" style="margin-bottom: 20px;">
                     <div class="card-header">
@@ -1739,7 +1777,12 @@
                     </div>
                     <div class="input-group">
                         <label class="input-label">Password</label>
-                        <input type="password" class="input-field" id="loginPassword" placeholder="Your password" />
+                        <div class="password-wrap">
+                            <input type="password" class="input-field" id="loginPassword" placeholder="Your password" />
+                            <button type="button" class="password-toggle" id="loginPasswordToggle"
+                                    aria-label="Show password" aria-pressed="false"
+                                    onclick="togglePasswordVisibility('loginPassword', this)">👁️</button>
+                        </div>
                     </div>
                     <button class="btn btn-primary btn-full" style="margin-top:8px;" onclick="handleLogin()">
                         Sign In 💙
@@ -1770,7 +1813,12 @@
                     </div>
                     <div class="input-group">
                         <label class="input-label">Password</label>
-                        <input type="password" class="input-field" id="signupPassword" placeholder="Min. 8 characters" />
+                        <div class="password-wrap">
+                            <input type="password" class="input-field" id="signupPassword" placeholder="Min. 8 characters" />
+                            <button type="button" class="password-toggle" id="signupPasswordToggle"
+                                    aria-label="Show password" aria-pressed="false"
+                                    onclick="togglePasswordVisibility('signupPassword', this)">👁️</button>
+                        </div>
                     </div>
                     <div class="input-group">
                         <label class="input-label">Role</label>
@@ -7482,10 +7530,15 @@
                 alert('Please enter the child code you were given (e.g. C-AB12CD).'); return;
             }
 
-            const name = prompt('Your name:');
-            const email = prompt('Your email:');
-            const password = prompt('Create a password (min 8 characters):');
-            if (!name || !email || !password) return;
+            // No family lookup here: this is a per-child code, validated and
+            // redeemed by redeem_child_code once a session exists.
+            const creds = await showJoinCredentialsModal({
+                title: 'Join with a child code',
+                subtitle: `You'll get access to the one child shared with code ${code}.`,
+                submitLabel: 'Continue 💙'
+            });
+            if (!creds) return;
+            const { name, email, password } = creds;
 
             // Carry name + the code being redeemed on the auth user. With
             // "Confirm email" enabled, signUp() returns session: null, and
@@ -7573,6 +7626,7 @@
             document.getElementById('authScreen').classList.remove('active');
             const mainApp = document.getElementById('mainApp');
             if (mainApp) mainApp.style.display = 'block';
+            resetPasswordVisibility();
         }
 
         function showFamilyMembers() {
@@ -7913,6 +7967,199 @@
             updateUI();
         }
         // exportSymptomData removed - not used in current version
+        // ── PASSWORD SHOW/HIDE ───────────────────────────────────────────
+        // A mistyped password on signup is invisible today and locks people
+        // out on their next login with no clue why.
+        function togglePasswordVisibility(inputId, btn) {
+            const input = document.getElementById(inputId);
+            if (!input) return;
+
+            const willShow = input.type === 'password';
+            // Preserve caret/selection — changing .type can reset it, which
+            // feels like the field cleared itself mid-typing.
+            const start = input.selectionStart;
+            const end = input.selectionEnd;
+            const wasFocused = document.activeElement === input;
+
+            input.type = willShow ? 'text' : 'password';
+
+            if (wasFocused) {
+                input.focus();
+                try { input.setSelectionRange(start, end); } catch (e) { /* not all types allow this */ }
+            }
+
+            if (btn) {
+                btn.textContent = willShow ? '🙈' : '👁️';
+                btn.setAttribute('aria-label', willShow ? 'Hide password' : 'Show password');
+                btn.setAttribute('aria-pressed', willShow ? 'true' : 'false');
+            }
+        }
+
+        // Never leave a password revealed on screen after leaving the auth UI.
+        function resetPasswordVisibility() {
+            ['loginPassword', 'signupPassword'].forEach(id => {
+                const input = document.getElementById(id);
+                const btn = document.getElementById(id + 'Toggle');
+                if (input) input.type = 'password';
+                if (btn) {
+                    btn.textContent = '👁️';
+                    btn.setAttribute('aria-label', 'Show password');
+                    btn.setAttribute('aria-pressed', 'false');
+                }
+            });
+        }
+
+        // ── JOIN CREDENTIALS MODAL ───────────────────────────────────────
+        // Replaces three sequential native prompt() dialogs. Those couldn't
+        // carry a show/hide toggle (they're browser chrome), masked nothing on
+        // some platforms, validated nothing, and gave no way back if you
+        // mistyped the first answer. Resolves with {name,email,password}, or
+        // null if the person backs out.
+        function showJoinCredentialsModal({ title, subtitle, submitLabel = 'Continue' } = {}) {
+            return new Promise(resolve => {
+                let settled = false;
+                const modal = document.createElement('div');
+                modal.className = 'modal active';
+                modal.innerHTML = `
+                    <div class="modal-content" style="max-width:420px;">
+                        <div style="background:linear-gradient(135deg,var(--primary),var(--purple));padding:20px;border-radius:20px 20px 0 0;margin:-20px -20px 20px;">
+                            <button class="modal-close" id="joinCredsClose" style="color:white;">×</button>
+                            <div style="color:white;font-size:18px;font-weight:800;">${title || 'Create your account'}</div>
+                            ${subtitle ? `<div style="color:rgba(255,255,255,0.75);font-size:12px;margin-top:4px;">${subtitle}</div>` : ''}
+                        </div>
+
+                        <div class="input-group">
+                            <label class="input-label">Your name</label>
+                            <input type="text" class="input-field" id="joinName" placeholder="First and last name" autocomplete="name" />
+                        </div>
+                        <div class="input-group">
+                            <label class="input-label">Your email</label>
+                            <input type="email" class="input-field" id="joinEmail" placeholder="your@email.com" autocomplete="email" />
+                        </div>
+                        <div class="input-group">
+                            <label class="input-label">Create a password</label>
+                            <div class="password-wrap">
+                                <input type="password" class="input-field" id="joinPassword" placeholder="Min. 8 characters" autocomplete="new-password" />
+                                <button type="button" class="password-toggle" id="joinPasswordToggle"
+                                        aria-label="Show password" aria-pressed="false"
+                                        onclick="togglePasswordVisibility('joinPassword', this)">👁️</button>
+                            </div>
+                        </div>
+                        <div id="joinCredsError" style="display:none;font-size:12px;color:var(--emergency);margin-bottom:10px;"></div>
+
+                        <button class="btn btn-primary btn-full" id="joinCredsSubmit">${submitLabel}</button>
+                    </div>`;
+                document.body.appendChild(modal);
+
+                const finish = value => {
+                    if (settled) return;
+                    settled = true;
+                    modal.remove();
+                    resolve(value);
+                };
+
+                const showError = msg => {
+                    const el = modal.querySelector('#joinCredsError');
+                    el.textContent = msg;
+                    el.style.display = 'block';
+                };
+
+                modal.querySelector('#joinCredsSubmit').onclick = () => {
+                    const name = modal.querySelector('#joinName').value.trim();
+                    const email = modal.querySelector('#joinEmail').value.trim();
+                    const password = modal.querySelector('#joinPassword').value;
+
+                    if (!name) return showError('Please enter your name.');
+                    if (!email || !/^\S+@\S+\.\S+$/.test(email)) return showError('Please enter a valid email address.');
+                    if (password.length < 8) return showError('Password must be at least 8 characters.');
+
+                    finish({ name, email, password });
+                };
+
+                modal.querySelector('#joinCredsClose').onclick = () => finish(null);
+                // Backdrop click cancels, but clicks inside the card must not.
+                modal.addEventListener('click', e => { if (e.target === modal) finish(null); });
+                modal.querySelector('#joinPassword').addEventListener('keydown', e => {
+                    if (e.key === 'Enter') modal.querySelector('#joinCredsSubmit').click();
+                });
+
+                setTimeout(() => modal.querySelector('#joinName')?.focus(), 50);
+            });
+        }
+
+        // ── SHARE SICKLESTRONG ───────────────────────────────────────────
+        const SHARE_URL = 'https://sicklestrong-v2.netlify.app';
+        const SHARE_TITLE = 'SickleStrong';
+        const SHARE_TEXT = `I've been using SickleStrong to keep track of sickle cell care — meds, pain, fevers, hydration, all in one place.
+
+There's no app store step. Open the link, add it to your home screen, and it works like an app.
+
+Thought of you 💙`;
+
+        async function shareSickleStrong() {
+            // Web Share API gives the real native sheet — the same one used for
+            // photos and links elsewhere on the device.
+            if (navigator.share) {
+                try {
+                    await navigator.share({ title: SHARE_TITLE, text: SHARE_TEXT, url: SHARE_URL });
+                    trackEvent('app_shared', { method: 'native' });
+                    return;
+                } catch (err) {
+                    // AbortError just means they closed the sheet — not a failure,
+                    // and showing a fallback there would be obnoxious.
+                    if (err && err.name === 'AbortError') return;
+                    // Anything else: fall through to the manual path.
+                }
+            }
+            showShareFallback();
+        }
+
+        // Desktop browsers without navigator.share land here. The button must
+        // never silently do nothing.
+        function showShareFallback() {
+            const full = `${SHARE_TEXT}\n\n${SHARE_URL}`;
+            const modal = document.createElement('div');
+            modal.className = 'modal active';
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width:420px;">
+                    <div style="background:linear-gradient(135deg,var(--primary),var(--purple));padding:20px;border-radius:20px 20px 0 0;margin:-20px -20px 20px;">
+                        <button class="modal-close" onclick="this.closest('.modal').remove()" style="color:white;">×</button>
+                        <div style="color:white;font-size:18px;font-weight:800;">💙 Share SickleStrong</div>
+                        <div style="color:rgba(255,255,255,0.75);font-size:12px;margin-top:4px;">Copy this and send it to whoever needs it</div>
+                    </div>
+                    <div class="input-group">
+                        <textarea class="input-field" id="shareFallbackText" rows="7" readonly
+                                  style="font-size:13px;line-height:1.5;resize:none;">${full}</textarea>
+                    </div>
+                    <button class="btn btn-primary btn-full" id="shareCopyBtn" onclick="copyShareText(this)">📋 Copy</button>
+                </div>`;
+            document.body.appendChild(modal);
+            trackEvent('app_shared', { method: 'fallback' });
+        }
+
+        async function copyShareText(btn) {
+            const full = `${SHARE_TEXT}\n\n${SHARE_URL}`;
+            let ok = false;
+            try {
+                await navigator.clipboard.writeText(full);
+                ok = true;
+            } catch (e) {
+                // clipboard API needs a secure context / permission; fall back
+                // to selecting the text so it can be copied manually.
+                const ta = document.getElementById('shareFallbackText');
+                if (ta) {
+                    ta.removeAttribute('readonly');
+                    ta.select();
+                    try { ok = document.execCommand('copy'); } catch (e2) { ok = false; }
+                    ta.setAttribute('readonly', 'readonly');
+                }
+            }
+            if (btn) {
+                btn.textContent = ok ? '✅ Copied!' : '⚠️ Press Ctrl/Cmd+C to copy';
+                if (ok) setTimeout(() => { btn.textContent = '📋 Copy'; }, 2000);
+            }
+        }
+
         function callEmergency() { if (confirm('Call 911?')) window.location.href = 'tel:911'; }
 
         // Initialize App
