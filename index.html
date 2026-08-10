@@ -669,6 +669,27 @@
             color: var(--text);
         }
 
+        /* Password show/hide toggle */
+        .password-wrap { position: relative; }
+        .password-wrap .input-field { padding-right: 46px; }
+        .password-toggle {
+            position: absolute;
+            right: 6px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            line-height: 1;
+            padding: 8px;
+            border-radius: 10px;
+            opacity: 0.55;
+            transition: opacity 0.2s ease, background 0.2s ease;
+        }
+        .password-toggle:hover { opacity: 1; background: var(--bg); }
+        .password-toggle:focus-visible { outline: 2px solid var(--primary); opacity: 1; }
+
         .input-field:focus {
             outline: none;
             border-color: var(--primary);
@@ -1366,10 +1387,30 @@
                             <span style="font-size:20px;">👨‍👩‍👧‍👦</span>
                             <span>Family Account</span>
                         </div>
-                        <button class="btn btn-secondary btn-small" onclick="showFamilyMembers()">Manage</button>
+                        <div style="display:flex;gap:8px;">
+                            <button class="btn btn-secondary btn-small" onclick="showChildShareCode()">🔗 Share child</button>
+                            <button class="btn btn-secondary btn-small" onclick="showFamilyMembers()">Manage</button>
+                        </div>
                     </div>
                     <div id="familyMembersPreview">
-                        <div style="font-size:13px;color:var(--text-light);">Add family members to share care access.</div>
+                        <div style="font-size:13px;color:var(--text-light);">Share a child's code to give someone access to that child only.</div>
+                    </div>
+                </div>
+
+                <!-- Share SickleStrong -->
+                <div class="card" style="margin-bottom:14px;">
+                    <div class="card-header" style="margin-bottom:10px;">
+                        <div>
+                            <div class="card-title" style="display:flex;align-items:center;gap:8px;">
+                                <span style="font-size:20px;">💙</span>
+                                <span>Share SickleStrong</span>
+                            </div>
+                            <div style="font-size:12px;color:var(--text-light);margin-top:3px;">Know a family who could use this?</div>
+                        </div>
+                        <button class="btn btn-primary btn-small" onclick="shareSickleStrong()">Share</button>
+                    </div>
+                    <div style="font-size:12px;color:var(--text-light);line-height:1.5;">
+                        No app store needed — they just open the link and add it to their home screen.
                     </div>
                 </div>
 
@@ -1725,19 +1766,27 @@
                     </div>
                     <div class="input-group">
                         <label class="input-label">Password</label>
-                        <input type="password" class="input-field" id="loginPassword" placeholder="Your password" />
+                        <div class="password-wrap">
+                            <input type="password" class="input-field" id="loginPassword" placeholder="Your password" />
+                            <button type="button" class="password-toggle" id="loginPasswordToggle"
+                                    aria-label="Show password" aria-pressed="false"
+                                    onclick="togglePasswordVisibility('loginPassword', this)">👁️</button>
+                        </div>
                     </div>
                     <button class="btn btn-primary btn-full" style="margin-top:8px;" onclick="handleLogin()">
                         Sign In 💙
                     </button>
-                    <div class="auth-divider">or join a family</div>
+                    <div class="auth-divider">or join with a child code</div>
                     <div class="input-group">
-                        <label class="input-label">Family Code</label>
+                        <label class="input-label">Child Code</label>
                         <input type="text" class="input-field family-code-input" id="familyCodeInput"
-                               placeholder="STRONG-0000" maxlength="11" />
+                               placeholder="C-AB12CD" maxlength="8" />
+                        <p style="font-size:11px;color:var(--text-light);margin-top:4px;">
+                            Enter the code shared with you to get access to that one child.
+                        </p>
                     </div>
                     <button class="btn btn-secondary btn-full" onclick="joinWithFamilyCode()">
-                        Join Family Account
+                        Join with Child Code
                     </button>
                 </div>
 
@@ -1753,7 +1802,12 @@
                     </div>
                     <div class="input-group">
                         <label class="input-label">Password</label>
-                        <input type="password" class="input-field" id="signupPassword" placeholder="Min. 8 characters" />
+                        <div class="password-wrap">
+                            <input type="password" class="input-field" id="signupPassword" placeholder="Min. 8 characters" />
+                            <button type="button" class="password-toggle" id="signupPasswordToggle"
+                                    aria-label="Show password" aria-pressed="false"
+                                    onclick="togglePasswordVisibility('signupPassword', this)">👁️</button>
+                        </div>
                     </div>
                     <div class="input-group">
                         <label class="input-label">Role</label>
@@ -5910,6 +5964,9 @@
                 appData.contacts.forEach(c => c.isPrimary = false);
             }
 
+            const child = getCurrentChild();
+            if (!child) { alert('Select a child before adding a contact.'); return; }
+
             const contactData = {
                 type: typeRadio.value,
                 name,
@@ -5917,18 +5974,23 @@
                 email: document.getElementById('contactEmail').value.trim(),
                 address: document.getElementById('contactAddress').value.trim(),
                 notes: document.getElementById('contactNotes').value.trim(),
+                childId: child.id,
                 isPrimary
             };
 
+            let savedContact;
             if (editId) {
                 const existing = appData.contacts.find(c => c.id === editId);
-                if (existing) Object.assign(existing, contactData);
+                if (existing) { Object.assign(existing, contactData); savedContact = existing; }
             } else {
-                appData.contacts.push({ id: Date.now(), ...contactData });
+                savedContact = { id: Date.now(), ...contactData };
+                appData.contacts.push(savedContact);
             }
 
             saveData();
-            getCurrentFamilyId().then(fid => { if (fid) cloudSync(() => _pushContact(newContact, fid)); });
+            if (savedContact) {
+                getCurrentFamilyId().then(fid => cloudSync(() => _pushContact(savedContact, child.id, fid)));
+            }
             document.querySelector('.modal.active')?.remove();
             updateUI();
             setTimeout(() => alert(`✅ ${name} ${editId ? 'updated' : 'added to emergency contacts'}`), 100);
@@ -6783,6 +6845,9 @@
             _cachedFamilyId = dbUser.family_id;
             const familyId = _cachedFamilyId;
 
+            // NOTE: reads are scoped by RLS (child_access), not by family_id, so a
+            // caregiver who redeemed one child's code sees ONLY that child — even
+            // across families. We intentionally do not filter by family_id here.
             const [
                 { data: children },
                 { data: meds },
@@ -6793,14 +6858,14 @@
                 { data: weightRows },
                 { data: noteRows }
             ] = await Promise.all([
-                sb.from('children').select('*').eq('family_id', familyId).eq('is_active', true),
-                sb.from('medications').select('*').eq('family_id', familyId).eq('is_active', true),
-                sb.from('contacts').select('*').eq('family_id', familyId).order('sort_order'),
-                sb.from('pain_logs').select('*').eq('family_id', familyId).order('logged_at', { ascending: false }).limit(200),
-                sb.from('temperature_logs').select('*').eq('family_id', familyId).order('logged_at', { ascending: false }).limit(200),
-                sb.from('symptoms').select('*').eq('family_id', familyId).order('logged_at', { ascending: false }).limit(200),
-                sb.from('weight_logs').select('*').eq('family_id', familyId).order('logged_at', { ascending: false }).limit(100),
-                sb.from('notes').select('*').eq('family_id', familyId).order('created_at', { ascending: false }).limit(100)
+                sb.from('children').select('*').eq('is_active', true),
+                sb.from('medications').select('*').eq('is_active', true),
+                sb.from('contacts').select('*').order('sort_order'),
+                sb.from('pain_logs').select('*').order('logged_at', { ascending: false }).limit(200),
+                sb.from('temperature_logs').select('*').order('logged_at', { ascending: false }).limit(200),
+                sb.from('symptoms').select('*').order('logged_at', { ascending: false }).limit(200),
+                sb.from('weight_logs').select('*').order('logged_at', { ascending: false }).limit(100),
+                sb.from('notes').select('*').order('created_at', { ascending: false }).limit(100)
             ]);
 
             if (children && children.length > 0) {
@@ -6825,6 +6890,7 @@
                         gender: c.gender,
                         bloodType: c.blood_type,
                         diseaseType: c.disease_type,
+                        shareCode: c.share_code,
                         emoji: c.emoji || '👧🏾',
                         color: c.color || childColors[idx % childColors.length],
                         photo: c.photo_url,
@@ -6908,6 +6974,7 @@
                     email: c.email,
                     address: c.address,
                     notes: c.notes,
+                    childId: c.child_id,
                     isPrimary: c.is_primary
                 }));
             }
@@ -7020,10 +7087,14 @@
             });
         }
 
-        async function _pushContact(contact, familyId) {
+        async function _pushContact(contact, childId, familyId) {
+            // child_id is required (DB enforces NOT NULL). Reject loudly rather
+            // than letting a null-child_id contact silently vanish under RLS.
+            if (!childId) throw new Error('Cannot sync contact: no child selected');
             const isUUID = typeof contact.id === 'string' && /^[0-9a-f-]{36}$/.test(contact.id);
             const payload = {
                 family_id: familyId,
+                child_id: childId,
                 type: contact.type || null,
                 name: contact.name,
                 phone: contact.phone || null,
@@ -7098,12 +7169,15 @@
                 return;
             }
 
-            // First login after email confirmation is where family setup
-            // actually happens — signup couldn't do it without a session.
-            // No-ops for accounts that are already set up.
+            // First login after confirming. Redemption must run BEFORE
+            // provisioning: redeem_child_code creates the users row tied to the
+            // sharer's family, so provisioning then correctly no-ops instead of
+            // creating a second, separate family for this caregiver.
+            const redeemedChild = await redeemPendingChildCode(data.user);
+
             const prov = await ensureUserProvisioned(data.user);
             if (!prov.profile) {
-                alert('Signed in, but we couldn\'t finish setting up your family. Please try signing in again, or contact support if it keeps happening.');
+                alert('Signed in, but we couldn\'t finish setting up your account. Please try signing in again, or contact support if it keeps happening.');
                 return;
             }
             const profile = prov.profile;
@@ -7118,8 +7192,10 @@
             closeAuthScreen();
             await syncAllFromCloud();
             updateFamilyMembersPreview();
-
-            if (prov.created) {
+            if (redeemedChild) {
+                trackFamilyMemberJoined();
+                alert(`Welcome! 💙\n\nYou now have access to ${redeemedChild}.`);
+            } else if (prov.created) {
                 trackFamilyAccountCreated();
                 alert(`Welcome, ${profile.full_name}! 💙\n\nYour account is all set up.${family?.family_code ? `\n\nYour Family Code: ${family.family_code}` : ''}`);
             } else {
@@ -7138,6 +7214,7 @@
         // once a real session exists. Metadata is used rather than localStorage
         // deliberately — someone can confirm their email on a different device
         // than they signed up on, and localStorage would lose the name.
+        //
         // Provisioning goes through a SECURITY DEFINER function rather than
         // direct inserts. Two reasons it can't be done client-side:
         //   1. families.insert().select() is INSERT ... RETURNING, and RETURNING
@@ -7222,53 +7299,82 @@
             closeAuthScreen();
             updateFamilyMembersPreview();
             trackFamilyAccountCreated();
-            alert(`Account created! 💙\n\nYour Family Code: ${familyCode}\n\nShare this code with family members so they can join your account.`);
+            alert(`Account created! 💙\n\nTo share a specific child with another caregiver, open the Family Account card and tap "🔗 Share child" — each child has its own code that shares that child only.`);
         }
 
+        // Per-child join: redeem a single child's share code. Grants access to
+        // Redeem a pending child code once a real session exists. Called after
+        // login and on session restore, because signUp() can't redeem: with
+        // email confirmation on it returns session: null, and the RPC needs
+        // auth.uid(). The code is read from user_metadata (survives confirming
+        // on a different device). Returns the child's name, or null.
+        async function redeemPendingChildCode(authUser, explicitCode) {
+            const code = explicitCode || (authUser?.user_metadata || {}).pending_child_code;
+            if (!code) return null;
+            const { data, error } = await sb.rpc('redeem_child_code', { p_code: code });
+            if (error || !data || data.length === 0) {
+                console.warn('[SickleStrong] child code redemption failed', error);
+                return null;
+            }
+            // Clear it so a later re-login doesn't try to redeem again.
+            if (!explicitCode) {
+                const meta = { ...(authUser.user_metadata || {}) };
+                delete meta.pending_child_code;
+                await sb.auth.updateUser({ data: meta });
+            }
+            const meta = authUser?.user_metadata || {};
+            if (meta.full_name) {
+                await sb.from('users').update({ full_name: meta.full_name }).eq('auth_id', authUser.id);
+            }
+            return data[0].out_child_name;
+        }
+
+        // ONLY that child — the redeemer never sees other children or caregivers
+        // in the family (enforced by RLS + the redeem_child_code function).
         async function joinWithFamilyCode() {
             const code = document.getElementById('familyCodeInput').value.trim().toUpperCase();
-            if (!code || code.length < 8) {
-                alert('Please enter a valid family code (e.g. STRONG-1234).'); return;
+            if (!code) {
+                alert('Please enter the child code you were given (e.g. C-AB12CD).'); return;
             }
 
-            // families_select requires you to already be a member, so a plain
-            // .select() by code can never resolve for a joiner. Use the
-            // DEFINER lookup instead.
-            const { data: found } = await sb.rpc('lookup_family_by_code', { p_code: code });
-            if (!found || found.length === 0) {
-                alert('Family code not found. Please check the code and try again.'); return;
-            }
-            const family = { id: found[0].out_family_id, family_code: found[0].out_family_code };
+            // No family lookup here: this is a per-child code, validated and
+            // redeemed by redeem_child_code once a session exists.
+            const creds = await showJoinCredentialsModal({
+                title: 'Join with a child code',
+                subtitle: `You'll get access to the one child shared with code ${code}.`,
+                submitLabel: 'Continue 💙'
+            });
+            if (!creds) return;
+            const { name, email, password } = creds;
 
-            const name = prompt('Your name:');
-            const email = prompt('Your email:');
-            const password = prompt('Create a password (min 8 characters):');
-
-            if (!name || !email || !password) return;
-
-            // Carry the join intent on the auth user so first login can
-            // complete it — same null-session constraint as handleSignup.
+            // Carry name + the code being redeemed on the auth user. With
+            // "Confirm email" enabled, signUp() returns session: null, and
+            // redeem_child_code raises 'Not authenticated' when auth.uid() is
+            // NULL — which would surface as a misleading "invalid code" error.
             const { data, error } = await sb.auth.signUp({
                 email, password,
-                options: { data: { full_name: name, role: 'caregiver', pending_family_code: family.family_code } }
+                options: { data: { full_name: name, role: 'caregiver', pending_child_code: code } }
             });
             if (error) { alert('Sign up failed: ' + error.message); return; }
 
             if (!data.session) {
                 closeAuthScreen();
-                alert(`Almost there, ${name}! 💙\n\nWe sent a confirmation link to ${email}.\n\nOpen it to confirm your account, then sign in — you'll be connected to the family automatically.`);
+                alert(`Almost there, ${name}! 💙\n\nWe sent a confirmation link to ${email}.\n\nOpen it to confirm your account, then sign in — you'll get access to the child that was shared with you.`);
                 return;
             }
 
-            const prov = await ensureUserProvisioned(data.user);
-            if (!prov.profile) {
-                alert('Account created, but joining the family failed. Please sign in again to finish.');
+            // Session already active (confirmation disabled): redeem now.
+            const childName = await redeemPendingChildCode(data.user, code);
+            if (!childName) {
+                alert('That child code is invalid or has reached its 5-caregiver limit. Please check with the person who shared it.');
                 return;
             }
+
+            // Set the display name on the profile the redeem function created.
+            await sb.from('users').update({ full_name: name }).eq('auth_id', data.user.id);
 
             familyAuth.isLoggedIn = true;
-            familyAuth.currentUser = { id: data.user.id, name, email, role: 'caregiver', familyCode: code, familyId: prov.profile.family_id, isPrimary: false };
-            familyAuth.familyCode = code;
+            familyAuth.currentUser = { id: data.user.id, name, email, role: 'caregiver', isPrimary: false };
             localStorage.setItem('ss_auth', JSON.stringify(familyAuth));
             localStorage.setItem('ss_auth_dismissed', 'true');
 
@@ -7276,7 +7382,46 @@
             await syncAllFromCloud();
             updateFamilyMembersPreview();
             trackFamilyMemberJoined();
-            alert(`You've joined the family account! 💙`);
+            alert(`You now have access to ${childName}! 💙`);
+        }
+
+        // Show the current child's share code so an owner can invite a caregiver
+        // to THAT child only.
+        function showChildShareCode() {
+            const child = getCurrentChild();
+            if (!child) { alert('Select a child first.'); return; }
+            if (!child.shareCode) {
+                alert('This child\'s share code will appear once you\'re signed in and synced.');
+                return;
+            }
+            const modal = document.createElement('div');
+            modal.className = 'modal active';
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width:400px;">
+                    <div style="background:linear-gradient(135deg,var(--primary),var(--purple));padding:20px;border-radius:20px 20px 0 0;margin:-20px -20px 20px;">
+                        <button class="modal-close" onclick="this.closest('.modal').remove()" style="color:white;">×</button>
+                        <div style="color:white;font-size:18px;font-weight:800;">🔗 Share ${child.name}</div>
+                        <div style="color:rgba(255,255,255,0.75);font-size:12px;margin-top:4px;">Give this code to a caregiver so they can see ${child.name} — and only ${child.name}.</div>
+                    </div>
+                    <div style="text-align:center;padding:8px 0 16px;">
+                        <div style="font-family:monospace;font-size:30px;font-weight:800;letter-spacing:.1em;color:var(--primary);">${child.shareCode}</div>
+                        <p style="font-size:12px;color:var(--text-light);margin-top:10px;">Up to 5 people can have access to each child. This code shares this child's data only — never your other children.</p>
+                    </div>
+                    <button class="btn btn-secondary btn-full" style="margin-bottom:8px;" onclick="rotateChildShareCode('${child.id}')">🔄 Generate a new code</button>
+                    <button class="btn btn-primary btn-full" onclick="this.closest('.modal').remove()">Done</button>
+                </div>`;
+            document.body.appendChild(modal);
+        }
+
+        async function rotateChildShareCode(childId) {
+            if (!confirm('Generate a new code? The old code will stop working immediately.')) return;
+            const { data, error } = await sb.rpc('rotate_child_share_code', { p_child_id: childId });
+            if (error || !data) { alert('Could not rotate the code. Please try again.'); return; }
+            const child = appData.children.find(c => c.id === childId);
+            if (child) child.shareCode = data;
+            saveData();
+            document.querySelector('.modal.active')?.remove();
+            showChildShareCode();
         }
 
         function skipAuth() {
@@ -7288,6 +7433,7 @@
             document.getElementById('authScreen').classList.remove('active');
             const mainApp = document.getElementById('mainApp');
             if (mainApp) mainApp.style.display = 'block';
+            resetPasswordVisibility();
         }
 
         function showFamilyMembers() {
@@ -7628,6 +7774,199 @@
             updateUI();
         }
         // exportSymptomData removed - not used in current version
+        // ── PASSWORD SHOW/HIDE ───────────────────────────────────────────
+        // A mistyped password on signup is invisible today and locks people
+        // out on their next login with no clue why.
+        function togglePasswordVisibility(inputId, btn) {
+            const input = document.getElementById(inputId);
+            if (!input) return;
+
+            const willShow = input.type === 'password';
+            // Preserve caret/selection — changing .type can reset it, which
+            // feels like the field cleared itself mid-typing.
+            const start = input.selectionStart;
+            const end = input.selectionEnd;
+            const wasFocused = document.activeElement === input;
+
+            input.type = willShow ? 'text' : 'password';
+
+            if (wasFocused) {
+                input.focus();
+                try { input.setSelectionRange(start, end); } catch (e) { /* not all types allow this */ }
+            }
+
+            if (btn) {
+                btn.textContent = willShow ? '🙈' : '👁️';
+                btn.setAttribute('aria-label', willShow ? 'Hide password' : 'Show password');
+                btn.setAttribute('aria-pressed', willShow ? 'true' : 'false');
+            }
+        }
+
+        // Never leave a password revealed on screen after leaving the auth UI.
+        function resetPasswordVisibility() {
+            ['loginPassword', 'signupPassword'].forEach(id => {
+                const input = document.getElementById(id);
+                const btn = document.getElementById(id + 'Toggle');
+                if (input) input.type = 'password';
+                if (btn) {
+                    btn.textContent = '👁️';
+                    btn.setAttribute('aria-label', 'Show password');
+                    btn.setAttribute('aria-pressed', 'false');
+                }
+            });
+        }
+
+        // ── JOIN CREDENTIALS MODAL ───────────────────────────────────────
+        // Replaces three sequential native prompt() dialogs. Those couldn't
+        // carry a show/hide toggle (they're browser chrome), masked nothing on
+        // some platforms, validated nothing, and gave no way back if you
+        // mistyped the first answer. Resolves with {name,email,password}, or
+        // null if the person backs out.
+        function showJoinCredentialsModal({ title, subtitle, submitLabel = 'Continue' } = {}) {
+            return new Promise(resolve => {
+                let settled = false;
+                const modal = document.createElement('div');
+                modal.className = 'modal active';
+                modal.innerHTML = `
+                    <div class="modal-content" style="max-width:420px;">
+                        <div style="background:linear-gradient(135deg,var(--primary),var(--purple));padding:20px;border-radius:20px 20px 0 0;margin:-20px -20px 20px;">
+                            <button class="modal-close" id="joinCredsClose" style="color:white;">×</button>
+                            <div style="color:white;font-size:18px;font-weight:800;">${title || 'Create your account'}</div>
+                            ${subtitle ? `<div style="color:rgba(255,255,255,0.75);font-size:12px;margin-top:4px;">${subtitle}</div>` : ''}
+                        </div>
+
+                        <div class="input-group">
+                            <label class="input-label">Your name</label>
+                            <input type="text" class="input-field" id="joinName" placeholder="First and last name" autocomplete="name" />
+                        </div>
+                        <div class="input-group">
+                            <label class="input-label">Your email</label>
+                            <input type="email" class="input-field" id="joinEmail" placeholder="your@email.com" autocomplete="email" />
+                        </div>
+                        <div class="input-group">
+                            <label class="input-label">Create a password</label>
+                            <div class="password-wrap">
+                                <input type="password" class="input-field" id="joinPassword" placeholder="Min. 8 characters" autocomplete="new-password" />
+                                <button type="button" class="password-toggle" id="joinPasswordToggle"
+                                        aria-label="Show password" aria-pressed="false"
+                                        onclick="togglePasswordVisibility('joinPassword', this)">👁️</button>
+                            </div>
+                        </div>
+                        <div id="joinCredsError" style="display:none;font-size:12px;color:var(--emergency);margin-bottom:10px;"></div>
+
+                        <button class="btn btn-primary btn-full" id="joinCredsSubmit">${submitLabel}</button>
+                    </div>`;
+                document.body.appendChild(modal);
+
+                const finish = value => {
+                    if (settled) return;
+                    settled = true;
+                    modal.remove();
+                    resolve(value);
+                };
+
+                const showError = msg => {
+                    const el = modal.querySelector('#joinCredsError');
+                    el.textContent = msg;
+                    el.style.display = 'block';
+                };
+
+                modal.querySelector('#joinCredsSubmit').onclick = () => {
+                    const name = modal.querySelector('#joinName').value.trim();
+                    const email = modal.querySelector('#joinEmail').value.trim();
+                    const password = modal.querySelector('#joinPassword').value;
+
+                    if (!name) return showError('Please enter your name.');
+                    if (!email || !/^\S+@\S+\.\S+$/.test(email)) return showError('Please enter a valid email address.');
+                    if (password.length < 8) return showError('Password must be at least 8 characters.');
+
+                    finish({ name, email, password });
+                };
+
+                modal.querySelector('#joinCredsClose').onclick = () => finish(null);
+                // Backdrop click cancels, but clicks inside the card must not.
+                modal.addEventListener('click', e => { if (e.target === modal) finish(null); });
+                modal.querySelector('#joinPassword').addEventListener('keydown', e => {
+                    if (e.key === 'Enter') modal.querySelector('#joinCredsSubmit').click();
+                });
+
+                setTimeout(() => modal.querySelector('#joinName')?.focus(), 50);
+            });
+        }
+
+        // ── SHARE SICKLESTRONG ───────────────────────────────────────────
+        const SHARE_URL = 'https://sicklestrong-v2.netlify.app';
+        const SHARE_TITLE = 'SickleStrong';
+        const SHARE_TEXT = `I've been using SickleStrong to keep track of sickle cell care — meds, pain, fevers, hydration, all in one place.
+
+There's no app store step. Open the link, add it to your home screen, and it works like an app.
+
+Thought of you 💙`;
+
+        async function shareSickleStrong() {
+            // Web Share API gives the real native sheet — the same one used for
+            // photos and links elsewhere on the device.
+            if (navigator.share) {
+                try {
+                    await navigator.share({ title: SHARE_TITLE, text: SHARE_TEXT, url: SHARE_URL });
+                    trackEvent('app_shared', { method: 'native' });
+                    return;
+                } catch (err) {
+                    // AbortError just means they closed the sheet — not a failure,
+                    // and showing a fallback there would be obnoxious.
+                    if (err && err.name === 'AbortError') return;
+                    // Anything else: fall through to the manual path.
+                }
+            }
+            showShareFallback();
+        }
+
+        // Desktop browsers without navigator.share land here. The button must
+        // never silently do nothing.
+        function showShareFallback() {
+            const full = `${SHARE_TEXT}\n\n${SHARE_URL}`;
+            const modal = document.createElement('div');
+            modal.className = 'modal active';
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width:420px;">
+                    <div style="background:linear-gradient(135deg,var(--primary),var(--purple));padding:20px;border-radius:20px 20px 0 0;margin:-20px -20px 20px;">
+                        <button class="modal-close" onclick="this.closest('.modal').remove()" style="color:white;">×</button>
+                        <div style="color:white;font-size:18px;font-weight:800;">💙 Share SickleStrong</div>
+                        <div style="color:rgba(255,255,255,0.75);font-size:12px;margin-top:4px;">Copy this and send it to whoever needs it</div>
+                    </div>
+                    <div class="input-group">
+                        <textarea class="input-field" id="shareFallbackText" rows="7" readonly
+                                  style="font-size:13px;line-height:1.5;resize:none;">${full}</textarea>
+                    </div>
+                    <button class="btn btn-primary btn-full" id="shareCopyBtn" onclick="copyShareText(this)">📋 Copy</button>
+                </div>`;
+            document.body.appendChild(modal);
+            trackEvent('app_shared', { method: 'fallback' });
+        }
+
+        async function copyShareText(btn) {
+            const full = `${SHARE_TEXT}\n\n${SHARE_URL}`;
+            let ok = false;
+            try {
+                await navigator.clipboard.writeText(full);
+                ok = true;
+            } catch (e) {
+                // clipboard API needs a secure context / permission; fall back
+                // to selecting the text so it can be copied manually.
+                const ta = document.getElementById('shareFallbackText');
+                if (ta) {
+                    ta.removeAttribute('readonly');
+                    ta.select();
+                    try { ok = document.execCommand('copy'); } catch (e2) { ok = false; }
+                    ta.setAttribute('readonly', 'readonly');
+                }
+            }
+            if (btn) {
+                btn.textContent = ok ? '✅ Copied!' : '⚠️ Press Ctrl/Cmd+C to copy';
+                if (ok) setTimeout(() => { btn.textContent = '📋 Copy'; }, 2000);
+            }
+        }
+
         function callEmergency() { if (confirm('Call 911?')) window.location.href = 'tel:911'; }
 
         // Initialize App
@@ -7743,7 +8082,10 @@
                 localStorage.setItem('ss_auth_dismissed', 'true');
                 // Clicking the confirmation link can land here with a live
                 // session without ever passing through handleLogin, so this
-                // path has to provision too. No-op once set up.
+                // path must redeem and provision too. Redeem first, so a
+                // caregiver joins the sharer's family instead of getting a new
+                // one. Both no-op once the account is set up.
+                await redeemPendingChildCode(session.user);
                 await ensureUserProvisioned(session.user);
                 await syncAllFromCloud();
             }
