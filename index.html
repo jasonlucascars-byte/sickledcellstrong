@@ -1255,7 +1255,9 @@
         .tag-purple { background: var(--purple-light); color: var(--purple); }
     </style>
     <!-- Supabase JS SDK -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- crossorigin lets the service worker cache a usable (non-opaque) copy,
+         so the installed app still opens when this CDN is unreachable. -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" crossorigin="anonymous"></script>
 </head>
 <body>
     <!-- Setup Wizard -->
@@ -1730,14 +1732,19 @@
                     <button class="btn btn-primary btn-full" style="margin-top:8px;" onclick="handleLogin()">
                         Sign In 💙
                     </button>
-                    <div class="auth-divider">or join a family</div>
+                    <div class="auth-divider">or join with an invite code</div>
                     <div class="input-group">
-                        <label class="input-label">Family Code</label>
+                        <label class="input-label">Invite Code</label>
                         <input type="text" class="input-field family-code-input" id="familyCodeInput"
-                               placeholder="STRONG-0000" maxlength="11" />
+                               placeholder="C-A1B2C3" maxlength="12"
+                               autocapitalize="characters" autocorrect="off" spellcheck="false" />
+                        <p style="font-size:11px;color:var(--text-light);margin-top:6px;line-height:1.5;">
+                            A child's invite code (C-A1B2C3) connects you to that child's records.
+                            A household code (STRONG-1234) joins the family only.
+                        </p>
                     </div>
                     <button class="btn btn-secondary btn-full" onclick="joinWithFamilyCode()">
-                        Join Family Account
+                        Join With Code
                     </button>
                 </div>
 
@@ -3891,7 +3898,9 @@
                     const saved = await _pushChild(child, familyId);
                     if (saved) {
                         child.id = saved.id; // use DB UUID
+                        child.shareCode = saved.share_code || null; // invite code for this child
                         appData.currentChildId = saved.id;
+                        saveData();
                     }
                     await _pushMeds(child.medications, child.id, familyId);
                 }
@@ -5920,15 +5929,25 @@
                 isPrimary
             };
 
+            let savedContact;
             if (editId) {
-                const existing = appData.contacts.find(c => c.id === editId);
-                if (existing) Object.assign(existing, contactData);
+                savedContact = appData.contacts.find(c => c.id === editId);
+                if (savedContact) Object.assign(savedContact, contactData);
             } else {
-                appData.contacts.push({ id: Date.now(), ...contactData });
+                savedContact = { id: Date.now(), ...contactData };
+                appData.contacts.push(savedContact);
             }
 
             saveData();
-            getCurrentFamilyId().then(fid => { if (fid) cloudSync(() => _pushContact(newContact, fid)); });
+            // Was `newContact`, which never existed — the ReferenceError was
+            // swallowed by cloudSync's catch, so no contact ever reached the
+            // cloud. Contacts hang off a child, so attach to the active one.
+            const contactChild = getCurrentChild();
+            if (savedContact && contactChild) {
+                getCurrentFamilyId().then(fid => {
+                    if (fid) cloudSync(() => _pushContact(savedContact, fid, contactChild.id));
+                });
+            }
             document.querySelector('.modal.active')?.remove();
             updateUI();
             setTimeout(() => alert(`✅ ${name} ${editId ? 'updated' : 'added to emergency contacts'}`), 100);
@@ -6748,10 +6767,61 @@
         // ── SUPABASE INIT ─────────────────────────────────────────────────
         const SUPABASE_URL = 'https://zprmzrngdgniexphjgem.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpwcm16cm5nZGduaWV4cGhqZ2VtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwNTc0MjksImV4cCI6MjA5NjYzMzQyOX0.5mNmKuOtTzyJrdzM6mlRIWqytPe2tUac_AK-cdMGL0A';
-        const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        // The Supabase bundle is loaded from a CDN. When that request fails —
+        // offline, blocked DNS, an ad blocker, a Facebook/Instagram in-app
+        // browser, a bad day at jsDelivr — `supabase` is undefined here. This
+        // line used to throw, and because it sits at the top level of the same
+        // script block as everything below it, it took out the app's only
+        // DOMContentLoaded handler too: no wizard, no main app, just a blank
+        // screen. Everything in SickleStrong works on local data alone, so fall
+        // back to a stub that reports "no session" and let the cloud reconnect
+        // on the next load.
+        const cloudAvailable = typeof supabase !== 'undefined'
+                               && typeof supabase.createClient === 'function';
+        const sb = cloudAvailable
+            ? supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+            : makeOfflineCloudStub();
+
+        // Mirrors just enough of the supabase-js surface that every call site
+        // resolves instead of throwing. Reads come back empty, writes come back
+        // with an error our callers already know how to ignore.
+        function makeOfflineCloudStub() {
+            console.warn('[SickleStrong] cloud library unavailable — running local-only');
+            const fail = () => Promise.resolve({
+                data: null,
+                error: { message: 'Cloud unavailable', code: 'CLOUD_UNAVAILABLE' }
+            });
+            const query = () => {
+                const q = {
+                    select: () => q, eq: () => q, in: () => q, order: () => q, limit: () => q,
+                    single: fail, maybeSingle: fail,
+                    insert: fail, upsert: fail, update: fail, delete: fail,
+                    then: (resolve) => resolve({ data: [], error: null })
+                };
+                return q;
+            };
+            return {
+                isOffline: true,
+                auth: {
+                    getSession: () => Promise.resolve({ data: { session: null }, error: null }),
+                    getUser:    () => Promise.resolve({ data: { user: null }, error: null }),
+                    signUp: fail, signInWithPassword: fail, signOut: fail
+                },
+                from: query,
+                rpc: fail
+            };
+        }
+
+        // True when we genuinely can't reach the cloud, so callers can show
+        // "you're offline" rather than "something went wrong".
+        function cloudIsOffline() {
+            return sb.isOffline === true || !navigator.onLine;
+        }
 
         // Canonical table: `users` (has auth_id col → auth.users.id)
-        // RLS pattern: family_id IN (SELECT family_id FROM users WHERE auth_id = auth.uid())
+        // Access model: every data table is scoped by child_access, never by
+        // family_id. Being in a household grants nothing on its own — a
+        // caregiver invited to one child sees that child and no siblings.
 
         // ── SUPABASE HELPERS ──────────────────────────────────────────────
 
@@ -6774,17 +6844,39 @@
         // ── SUPABASE LOAD (on login / session restore) ────────────────────
 
         async function syncAllFromCloud() {
+            if (sb.isOffline) return;
+
             const { data: { user } } = await sb.auth.getUser();
             if (!user) return;
 
-            const { data: dbUser } = await sb.from('users').select('family_id').eq('auth_id', user.id).single();
-            if (!dbUser) return;
+            const { data: dbUser } = await sb.from('users').select('family_id').eq('auth_id', user.id).maybeSingle();
+            _cachedFamilyId = dbUser?.family_id || null;
 
-            _cachedFamilyId = dbUser.family_id;
-            const familyId = _cachedFamilyId;
+            // Scoped by child, never by family. A caregiver invited to one child
+            // must not see that child's siblings — and may not even share a
+            // household with them (two parents of two half-siblings each hold
+            // their own family). RLS already narrows `children` to the rows in
+            // child_access, so ask for all of them and let the policy decide;
+            // filtering by family_id here would both leak siblings and hide
+            // children shared from another household.
+            const { data: children, error: childErr } = await sb
+                .from('children').select('*').eq('is_active', true);
+
+            if (childErr) {
+                console.warn('[SickleStrong] could not load children', childErr);
+                return;
+            }
+
+            const childIds = (children || []).map(c => c.id);
+
+            if (childIds.length === 0) {
+                // Nothing shared with this account yet. Leave local data alone.
+                await loadFamilyMembers();
+                updateFamilyMembersPreview();
+                return;
+            }
 
             const [
-                { data: children },
                 { data: meds },
                 { data: contacts },
                 { data: painLogs },
@@ -6793,14 +6885,13 @@
                 { data: weightRows },
                 { data: noteRows }
             ] = await Promise.all([
-                sb.from('children').select('*').eq('family_id', familyId).eq('is_active', true),
-                sb.from('medications').select('*').eq('family_id', familyId).eq('is_active', true),
-                sb.from('contacts').select('*').eq('family_id', familyId).order('sort_order'),
-                sb.from('pain_logs').select('*').eq('family_id', familyId).order('logged_at', { ascending: false }).limit(200),
-                sb.from('temperature_logs').select('*').eq('family_id', familyId).order('logged_at', { ascending: false }).limit(200),
-                sb.from('symptoms').select('*').eq('family_id', familyId).order('logged_at', { ascending: false }).limit(200),
-                sb.from('weight_logs').select('*').eq('family_id', familyId).order('logged_at', { ascending: false }).limit(100),
-                sb.from('notes').select('*').eq('family_id', familyId).order('created_at', { ascending: false }).limit(100)
+                sb.from('medications').select('*').in('child_id', childIds).eq('is_active', true),
+                sb.from('contacts').select('*').in('child_id', childIds).order('sort_order'),
+                sb.from('pain_logs').select('*').in('child_id', childIds).order('logged_at', { ascending: false }).limit(200),
+                sb.from('temperature_logs').select('*').in('child_id', childIds).order('logged_at', { ascending: false }).limit(200),
+                sb.from('symptoms').select('*').in('child_id', childIds).order('logged_at', { ascending: false }).limit(200),
+                sb.from('weight_logs').select('*').in('child_id', childIds).order('logged_at', { ascending: false }).limit(100),
+                sb.from('notes').select('*').in('child_id', childIds).order('created_at', { ascending: false }).limit(100)
             ]);
 
             if (children && children.length > 0) {
@@ -6828,6 +6919,7 @@
                         emoji: c.emoji || '👧🏾',
                         color: c.color || childColors[idx % childColors.length],
                         photo: c.photo_url,
+                        shareCode: c.share_code || null,
                         selfTracking: c.self_tracking,
                         hydrationGoal: c.hydration_goal || 48,
                         daysPainFree: c.days_pain_free || 0,
@@ -6914,7 +7006,50 @@
 
             saveData();
             updateUI();
+            await loadFamilyMembers();
             updateFamilyMembersPreview();
+        }
+
+        // Who else can see the children this account has access to. There is no
+        // FK between child_access and public.users (both point at auth.users),
+        // so PostgREST can't embed them — two queries, both RLS-filtered.
+        async function loadFamilyMembers() {
+            if (sb.isOffline) { return; }
+            try {
+                const { data: { user } } = await sb.auth.getUser();
+                if (!user) { familyAuth.familyMembers = []; return; }
+
+                const { data: access } = await sb
+                    .from('child_access').select('auth_id, child_id, permission, created_at');
+                if (!access || access.length === 0) { familyAuth.familyMembers = []; return; }
+
+                const authIds = [...new Set(access.map(a => a.auth_id))];
+                const { data: people } = await sb
+                    .from('users')
+                    .select('auth_id, full_name, email, role, is_primary, created_at')
+                    .in('auth_id', authIds);
+
+                const childName = (id) => appData.children.find(c => c.id === id)?.name || 'a child';
+
+                familyAuth.familyMembers = (people || []).map(p => {
+                    const rows = access.filter(a => a.auth_id === p.auth_id);
+                    return {
+                        id: p.auth_id,
+                        name: p.full_name || p.email || 'Family member',
+                        email: p.email,
+                        role: p.role || 'caregiver',
+                        isPrimary: p.is_primary,
+                        isYou: p.auth_id === user.id,
+                        // 'admin' isn't a child_access permission — the account
+                        // that created the child is the one who can manage it.
+                        permissions: p.is_primary ? 'admin' : (rows[0]?.permission || 'view'),
+                        joinedAt: rows.map(r => r.created_at).sort()[0] || p.created_at || null,
+                        childNames: rows.map(r => childName(r.child_id))
+                    };
+                }).sort((a, b) => (b.isYou ? 1 : 0) - (a.isYou ? 1 : 0));
+            } catch (err) {
+                console.warn('[SickleStrong] could not load family members', err);
+            }
         }
 
         // ── SUPABASE PUSH HELPERS (fire-and-forget) ───────────────────────
@@ -7020,10 +7155,14 @@
             });
         }
 
-        async function _pushContact(contact, familyId) {
+        // contacts.child_id is NOT NULL and its RLS policy is child-scoped, so a
+        // contact has to be attached to a specific child to save at all.
+        async function _pushContact(contact, familyId, childId) {
+            if (!childId) return;
             const isUUID = typeof contact.id === 'string' && /^[0-9a-f-]{36}$/.test(contact.id);
             const payload = {
                 family_id: familyId,
+                child_id: childId,
                 type: contact.type || null,
                 name: contact.name,
                 phone: contact.phone || null,
@@ -7057,6 +7196,75 @@
             familyCode: null
         };
 
+        // Names and codes get interpolated into innerHTML templates below.
+        function escapeHtml(value) {
+            return String(value ?? '').replace(/[&<>"']/g, ch => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+            })[ch]);
+        }
+
+        // Codes get copied out of texts and emails, so they arrive with stray
+        // spaces, smart dashes, or no dash at all. Accept all of it.
+        function normalizeJoinCode(raw) {
+            return String(raw || '')
+                .trim()
+                .toUpperCase()
+                .replace(/[‐-―−]/g, '-')   // en/em dashes → hyphen
+                .replace(/\s+/g, '')
+                .replace(/^C[-]?([A-Z0-9]{6})$/, 'C-$1')
+                .replace(/^([A-Z]+)[-]?(\d{4})$/, '$1-$2');
+        }
+
+        // navigator.clipboard is undefined outside secure contexts and in a
+        // number of in-app browsers — including the Facebook and Instagram ones
+        // families arrive from. The old call had no fallback and no .catch(), so
+        // the button threw and did nothing at all. Falls back to execCommand,
+        // then to showing the code for manual copying.
+        async function copyTextToClipboard(text, label) {
+            const done = () => alert(`Copied! 💙\n\n${label || text}`);
+            try {
+                if (navigator.clipboard && window.isSecureContext) {
+                    await navigator.clipboard.writeText(text);
+                    return done();
+                }
+            } catch (err) {
+                console.warn('[SickleStrong] clipboard write failed', err);
+            }
+            try {
+                const helper = document.createElement('textarea');
+                helper.value = text;
+                helper.setAttribute('readonly', '');
+                helper.style.cssText = 'position:fixed;top:0;left:0;opacity:0;';
+                document.body.appendChild(helper);
+                helper.select();
+                helper.setSelectionRange(0, text.length);
+                const ok = document.execCommand('copy');
+                document.body.removeChild(helper);
+                if (ok) return done();
+            } catch (err) {
+                console.warn('[SickleStrong] execCommand copy failed', err);
+            }
+            prompt('Copy this code:', text);
+        }
+
+        // The native share sheet is the path most families actually use — it
+        // gets the code into Messages or WhatsApp without a copy/paste step.
+        async function shareInviteCode(code, childName) {
+            const message = childName
+                ? `Join ${childName}'s SickleStrong care team with this invite code: ${code}\n\nOpen the app, enter the code under "Join a family", and you'll see ${childName}'s health records.`
+                : `Join our family on SickleStrong with this code: ${code}`;
+            if (navigator.share) {
+                try {
+                    await navigator.share({ title: 'SickleStrong invite', text: message });
+                    return;
+                } catch (err) {
+                    if (err && err.name === 'AbortError') return; // user dismissed
+                    console.warn('[SickleStrong] share failed', err);
+                }
+            }
+            copyTextToClipboard(message, code);
+        }
+
         function generateFamilyCode() {
             const words = ['STRONG','BRAVE','CARE','HOPE','LOVE','HEAL','BOND','SAFE'];
             const word = words[Math.floor(Math.random() * words.length)];
@@ -7085,7 +7293,10 @@
                 const accounts = JSON.parse(localStorage.getItem('ss_accounts') || '[]');
                 const account = accounts.find(a => a.email === email && a.password === btoa(password));
                 if (!account) {
-                    alert('Email or password incorrect. Please try again.'); return;
+                    alert(cloudIsOffline()
+                        ? "You appear to be offline.\n\nConnect to the internet and try again — your data on this device is safe."
+                        : 'Email or password incorrect. Please try again.');
+                    return;
                 }
                 familyAuth.isLoggedIn = true;
                 familyAuth.currentUser = account;
@@ -7103,15 +7314,23 @@
             // No-ops for accounts that are already set up.
             const prov = await ensureUserProvisioned(data.user);
             if (!prov.profile) {
-                alert('Signed in, but we couldn\'t finish setting up your family. Please try signing in again, or contact support if it keeps happening.');
+                alert(provisioningErrorMessage(prov.error)
+                    || 'Signed in, but we couldn\'t finish setting up your family. Please try signing in again, or contact support if it keeps happening.');
                 return;
             }
             const profile = prov.profile;
             const { data: family } = await sb.from('families').select('*').eq('id', profile.family_id).maybeSingle();
 
             familyAuth.isLoggedIn = true;
-            familyAuth.currentUser = { id: data.user.id, name: profile.full_name || email, email, role: profile.role || 'parent', familyCode: family?.family_code, familyId: profile.family_id, isPrimary: profile.is_primary };
-            familyAuth.familyCode = family?.family_code;
+            familyAuth.currentUser = {
+                id: data.user.id, name: profile.full_name || email, email,
+                role: profile.role || 'parent',
+                familyCode: family?.family_code || prov.familyCode,
+                familyId: profile.family_id, isPrimary: profile.is_primary,
+                permissions: profile.is_primary ? 'admin' : 'full',
+                joinedAt: data.user.created_at || null
+            };
+            familyAuth.familyCode = family?.family_code || prov.familyCode;
             localStorage.setItem('ss_auth', JSON.stringify(familyAuth));
             localStorage.setItem('ss_auth_dismissed', 'true');
 
@@ -7119,9 +7338,12 @@
             await syncAllFromCloud();
             updateFamilyMembersPreview();
 
-            if (prov.created) {
+            if (prov.joinedChildName) {
+                trackFamilyMemberJoined();
+                alert(`Welcome, ${profile.full_name}! 💙\n\nYou're connected to ${prov.joinedChildName}'s care team.`);
+            } else if (prov.created) {
                 trackFamilyAccountCreated();
-                alert(`Welcome, ${profile.full_name}! 💙\n\nYour account is all set up.${family?.family_code ? `\n\nYour Family Code: ${family.family_code}` : ''}`);
+                alert(`Welcome, ${profile.full_name}! 💙\n\nYour account is all set up.${family?.family_code ? `\n\nYour Household Code: ${family.family_code}` : ''}`);
             } else {
                 alert(`Welcome back! 💙`);
             }
@@ -7151,7 +7373,8 @@
             const { data, error } = await sb.rpc('provision_current_user', {
                 p_full_name: meta.full_name || null,
                 p_role: meta.role || 'parent',
-                p_join_code: meta.pending_family_code || null
+                p_join_code: meta.pending_family_code || null,
+                p_child_code: meta.pending_child_code || null
             });
             if (error || !data || data.length === 0) {
                 console.warn('[SickleStrong] provisioning failed', error);
@@ -7164,11 +7387,33 @@
                     family_id: row.out_family_id,
                     full_name: row.out_full_name,
                     role: meta.role || 'parent',
-                    is_primary: !meta.pending_family_code
+                    is_primary: !meta.pending_family_code && !meta.pending_child_code
                 },
                 familyCode: row.out_family_code,
-                created: row.out_created
+                created: row.out_created,
+                joinedChildName: row.out_joined_child_name || null
             };
+        }
+
+        // provision_current_user raises these rather than silently doing
+        // something surprising (it used to quietly create a brand-new family
+        // when a join code didn't resolve, so the invitee "joined" into an
+        // empty account of their own).
+        function provisioningErrorMessage(error) {
+            const raw = (error && error.message) || '';
+            if (raw.includes('INVALID_CHILD_CODE')) {
+                return 'That invite code is no longer valid. Ask the person who shared it to send you a new one.';
+            }
+            if (raw.includes('INVALID_FAMILY_CODE')) {
+                return 'That family code is no longer valid. Ask them to check the code and try again.';
+            }
+            if (raw.includes('CHILD_CAREGIVER_LIMIT')) {
+                return 'That child already has the maximum of 5 caregivers.';
+            }
+            if (cloudIsOffline()) {
+                return 'You appear to be offline. Reconnect and try again — nothing was lost.';
+            }
+            return null;
         }
 
         async function handleSignup() {
@@ -7213,7 +7458,8 @@
             const family = { id: prov.profile.family_id };
 
             familyAuth.isLoggedIn = true;
-            familyAuth.currentUser = { id: data.user.id, name, email, role, familyCode, familyId: family.id, isPrimary: true };
+            familyAuth.currentUser = { id: data.user.id, name, email, role, familyCode, familyId: family.id, isPrimary: true,
+                                       permissions: 'admin', joinedAt: new Date().toISOString() };
             familyAuth.familyCode = familyCode;
             familyAuth.familyMembers = [familyAuth.currentUser];
             localStorage.setItem('ss_auth', JSON.stringify(familyAuth));
@@ -7222,61 +7468,180 @@
             closeAuthScreen();
             updateFamilyMembersPreview();
             trackFamilyAccountCreated();
-            alert(`Account created! 💙\n\nYour Family Code: ${familyCode}\n\nShare this code with family members so they can join your account.`);
+            alert(`Account created! 💙\n\nYour Family Code: ${familyCode}\n\nTo let someone see a child's health records, open Family Members and share that child's invite code — they'll only ever see the child you invite them to.`);
+        }
+
+        // ── JOINING ──────────────────────────────────────────────────────
+        // Two kinds of code can be typed into the join box:
+        //   C-XXXXXX     a child invite code — grants access to that one child
+        //   WORD-1234    a family code — joins the household only
+        // Access to a child's records comes exclusively from a child_access
+        // row, which only the child code creates. The family code deliberately
+        // grants no health data: a parent sharing one child with that child's
+        // other parent must not hand over their other children too.
+        function classifyJoinCode(code) {
+            if (/^C-[A-Z0-9]{6}$/.test(code)) return 'child';
+            if (/^[A-Z]+-\d{4}$/.test(code)) return 'family';
+            return null;
         }
 
         async function joinWithFamilyCode() {
-            const code = document.getElementById('familyCodeInput').value.trim().toUpperCase();
-            if (!code || code.length < 8) {
-                alert('Please enter a valid family code (e.g. STRONG-1234).'); return;
+            const input = document.getElementById('familyCodeInput');
+            const code = normalizeJoinCode(input ? input.value : '');
+
+            const kind = classifyJoinCode(code);
+            if (!kind) {
+                alert('Please enter an invite code.\n\nA child invite code looks like C-A1B2C3.\nA family code looks like STRONG-1234.');
+                return;
             }
 
-            // families_select requires you to already be a member, so a plain
-            // .select() by code can never resolve for a joiner. Use the
-            // DEFINER lookup instead.
-            const { data: found } = await sb.rpc('lookup_family_by_code', { p_code: code });
-            if (!found || found.length === 0) {
-                alert('Family code not found. Please check the code and try again.'); return;
+            if (cloudIsOffline()) {
+                alert("You appear to be offline.\n\nConnect to the internet and try again — joining needs a connection.");
+                return;
             }
-            const family = { id: found[0].out_family_id, family_code: found[0].out_family_code };
 
-            const name = prompt('Your name:');
-            const email = prompt('Your email:');
-            const password = prompt('Create a password (min 8 characters):');
+            let target;
+            if (kind === 'child') {
+                // children_select requires child_access, so an invitee can never
+                // resolve this with a plain select. Same DEFINER-lookup reason
+                // as lookup_family_by_code.
+                const { data, error } = await sb.rpc('lookup_child_by_code', { p_code: code });
+                if (error) {
+                    alert('We couldn\'t check that code just now. Please try again in a moment.');
+                    console.warn('[SickleStrong] child code lookup failed', error);
+                    return;
+                }
+                if (!data || data.length === 0) {
+                    alert('That invite code wasn\'t found.\n\nDouble-check it with the person who sent it — codes look like C-A1B2C3.');
+                    return;
+                }
+                target = { kind, code, childName: data[0].out_child_name };
+            } else {
+                const { data, error } = await sb.rpc('lookup_family_by_code', { p_code: code });
+                if (error) {
+                    alert('We couldn\'t check that code just now. Please try again in a moment.');
+                    console.warn('[SickleStrong] family code lookup failed', error);
+                    return;
+                }
+                if (!data || data.length === 0) {
+                    alert('That family code wasn\'t found.\n\nDouble-check it with the person who sent it — codes look like STRONG-1234.');
+                    return;
+                }
+                target = { kind, code: data[0].out_family_code };
+            }
 
-            if (!name || !email || !password) return;
+            showJoinDetailsModal(target);
+        }
 
-            // Carry the join intent on the auth user so first login can
-            // complete it — same null-session constraint as handleSignup.
-            const { data, error } = await sb.auth.signUp({
-                email, password,
-                options: { data: { full_name: name, role: 'caregiver', pending_family_code: family.family_code } }
+        // Replaces three chained prompt() dialogs, which validated nothing and
+        // vanished without explanation if any one of them was cancelled.
+        function showJoinDetailsModal(target) {
+            const heading = target.kind === 'child'
+                ? `Join ${escapeHtml(target.childName)}'s care team`
+                : 'Join a family account';
+            const blurb = target.kind === 'child'
+                ? `You'll be able to see and add to <strong>${escapeHtml(target.childName)}</strong>'s health records. You won't see any other children.`
+                : `You'll join this household. To see a child's health records, ask for that child's invite code as well.`;
+
+            const modal = document.createElement('div');
+            modal.className = 'modal active';
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width:420px;">
+                    <button class="modal-close" onclick="this.closest('.modal').remove()">×</button>
+                    <div class="modal-title">💙 ${heading}</div>
+                    <p style="font-size:13px;color:var(--text-light);line-height:1.6;margin-bottom:16px;">${blurb}</p>
+
+                    <div class="input-group">
+                        <label class="input-label">Your Name</label>
+                        <input type="text" class="input-field" id="joinName" placeholder="Full name" autocomplete="name" />
+                    </div>
+                    <div class="input-group">
+                        <label class="input-label">Email Address</label>
+                        <input type="email" class="input-field" id="joinEmail" placeholder="your@email.com" autocomplete="email" />
+                    </div>
+                    <div class="input-group">
+                        <label class="input-label">Create a Password</label>
+                        <input type="password" class="input-field" id="joinPassword" placeholder="Min. 8 characters" autocomplete="new-password" />
+                    </div>
+                    <div id="joinError" style="display:none;font-size:13px;color:var(--emergency);margin-bottom:10px;"></div>
+                    <button class="btn btn-primary btn-full" id="joinSubmit">Join 💙</button>
+                </div>
+            `;
+            document.body.appendChild(modal);
+
+            modal.querySelector('#joinSubmit').addEventListener('click', () => submitJoin(target, modal));
+            modal.querySelector('#joinPassword').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') submitJoin(target, modal);
             });
-            if (error) { alert('Sign up failed: ' + error.message); return; }
+            setTimeout(() => modal.querySelector('#joinName')?.focus(), 50);
+        }
+
+        async function submitJoin(target, modal) {
+            const name = modal.querySelector('#joinName').value.trim();
+            const email = modal.querySelector('#joinEmail').value.trim();
+            const password = modal.querySelector('#joinPassword').value;
+            const errorEl = modal.querySelector('#joinError');
+            const button = modal.querySelector('#joinSubmit');
+
+            const showError = (msg) => {
+                errorEl.textContent = msg;
+                errorEl.style.display = 'block';
+                button.disabled = false;
+                button.textContent = 'Join 💙';
+            };
+
+            if (!name) return showError('Please enter your name.');
+            if (!/^\S+@\S+\.\S+$/.test(email)) return showError('Please enter a valid email address.');
+            if (password.length < 8) return showError('Password must be at least 8 characters.');
+
+            button.disabled = true;
+            button.textContent = 'Joining…';
+            errorEl.style.display = 'none';
+
+            // The join intent rides on the auth user: with email confirmation
+            // on, signUp returns session: null, and the person may well confirm
+            // on a different device, where localStorage wouldn't follow them.
+            const metadata = { full_name: name, role: 'caregiver' };
+            if (target.kind === 'child') metadata.pending_child_code = target.code;
+            else metadata.pending_family_code = target.code;
+
+            const { data, error } = await sb.auth.signUp({ email, password, options: { data: metadata } });
+            if (error) return showError(error.message);
 
             if (!data.session) {
+                modal.remove();
                 closeAuthScreen();
-                alert(`Almost there, ${name}! 💙\n\nWe sent a confirmation link to ${email}.\n\nOpen it to confirm your account, then sign in — you'll be connected to the family automatically.`);
+                const what = target.kind === 'child'
+                    ? `you'll be connected to ${target.childName}'s records automatically`
+                    : `you'll be connected to the family automatically`;
+                alert(`Almost there, ${name}! 💙\n\nWe sent a confirmation link to ${email}.\n\nOpen it to confirm your account, then sign in — ${what}.`);
                 return;
             }
 
             const prov = await ensureUserProvisioned(data.user);
             if (!prov.profile) {
-                alert('Account created, but joining the family failed. Please sign in again to finish.');
-                return;
+                return showError(provisioningErrorMessage(prov.error)
+                    || 'We couldn\'t finish connecting you. Please sign in again to complete it.');
             }
 
             familyAuth.isLoggedIn = true;
-            familyAuth.currentUser = { id: data.user.id, name, email, role: 'caregiver', familyCode: code, familyId: prov.profile.family_id, isPrimary: false };
-            familyAuth.familyCode = code;
+            familyAuth.currentUser = {
+                id: data.user.id, name, email, role: 'caregiver',
+                familyCode: prov.familyCode, familyId: prov.profile.family_id,
+                isPrimary: false, permissions: 'full', joinedAt: new Date().toISOString()
+            };
+            familyAuth.familyCode = prov.familyCode;
             localStorage.setItem('ss_auth', JSON.stringify(familyAuth));
             localStorage.setItem('ss_auth_dismissed', 'true');
 
+            modal.remove();
             closeAuthScreen();
             await syncAllFromCloud();
             updateFamilyMembersPreview();
             trackFamilyMemberJoined();
-            alert(`You've joined the family account! 💙`);
+            alert(prov.joinedChildName
+                ? `You're connected to ${prov.joinedChildName}'s care team! 💙`
+                : `You've joined the family account! 💙`);
         }
 
         function skipAuth() {
@@ -7290,69 +7655,187 @@
             if (mainApp) mainApp.style.display = 'block';
         }
 
-        function showFamilyMembers() {
-            const auth = familyAuth.currentUser;
-            const members = familyAuth.familyMembers;
-            const familyCode = familyAuth.familyCode;
+        // A member's display name can be missing (an invitee who confirmed
+        // before filling anything in), so never call .charAt on it blindly.
+        function memberInitial(member) {
+            const name = (member && member.name) ? String(member.name).trim() : '';
+            return name ? name.charAt(0).toUpperCase() : '?';
+        }
 
-            const permOptions = ['admin','full','view'];
+        function memberFirstName(member) {
+            const name = (member && member.name) ? String(member.name).trim() : '';
+            return name ? name.split(' ')[0] : 'Member';
+        }
 
+        // joinedAt is absent for accounts created before it was recorded, and
+        // `new Date(undefined)` renders as the literal text "Invalid Date".
+        function formatJoinedDate(value) {
+            if (!value) return null;
+            const date = new Date(value);
+            if (isNaN(date.getTime())) return null;
+            return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+        }
+
+        async function showFamilyMembers() {
             const modal = document.createElement('div');
             modal.className = 'modal active';
             modal.innerHTML = `
                 <div class="modal-content" style="max-width:460px;">
                     <button class="modal-close" onclick="this.closest('.modal').remove()">×</button>
-                    <div class="modal-title">👨‍👩‍👧‍👦 Family Members</div>
+                    <div class="modal-title">👨‍👩‍👧‍👦 Family &amp; Sharing</div>
+                    <div style="font-size:13px;color:var(--text-light);text-align:center;padding:20px;">Loading…</div>
+                </div>
+            `;
+            document.body.appendChild(modal);
 
-                    ${familyCode ? `
-                    <div style="background:linear-gradient(135deg,var(--primary-faint),var(--purple-light));
-                                border-radius:14px;padding:14px 16px;margin-bottom:16px;text-align:center;">
-                        <div style="font-size:11px;font-weight:700;color:var(--primary-dark);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;">Your Family Code</div>
-                        <div style="font-size:24px;font-weight:800;font-family:'Sora',sans-serif;color:var(--text);letter-spacing:.1em;">${familyCode}</div>
-                        <div style="font-size:11px;color:var(--text-light);margin-top:4px;">Share this code to invite family members</div>
-                        <button onclick="navigator.clipboard.writeText('${familyCode}').then(()=>alert('Copied! 💙'))"
-                            style="margin-top:8px;background:var(--primary);color:white;border:none;border-radius:10px;
-                                   padding:6px 16px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Sora',sans-serif;">
-                            Copy Code
-                        </button>
-                    </div>` : `
-                    <div style="background:var(--bg);border-radius:14px;padding:14px;margin-bottom:16px;text-align:center;">
-                        <div style="font-size:13px;color:var(--text-light);">Sign in or create an account to share access with family members.</div>
-                        <button class="btn btn-primary" style="margin-top:10px;" onclick="this.closest('.modal').remove();document.getElementById('authScreen').classList.add('active');">Create Account</button>
-                    </div>`}
+            await loadFamilyMembers();
+            if (!modal.isConnected) return; // closed while loading
+            renderFamilyMembersModal(modal);
+        }
 
-                    ${members.length > 0 ? `
-                    <div class="report-section-title">Members (${members.length}/5)</div>
-                    ${members.map(m => `
-                        <div class="member-item">
-                            <div class="member-avatar">${m.name.charAt(0).toUpperCase()}</div>
-                            <div class="member-info">
-                                <div class="member-name">${m.name} ${m.isPrimary ? '⭐' : ''}</div>
-                                <div class="member-role">${m.role} · Joined ${new Date(m.joinedAt).toLocaleDateString('en-US',{month:'short',year:'numeric'})}</div>
-                            </div>
-                            <span class="permission-badge ${m.permissions === 'admin' ? 'perm-admin' : m.permissions === 'full' ? 'perm-full' : 'perm-view'}">
-                                ${m.permissions === 'admin' ? 'Admin' : m.permissions === 'full' ? 'Full Access' : 'View Only'}
-                            </span>
+        function renderFamilyMembersModal(modal) {
+            const auth = familyAuth.currentUser;
+            const members = familyAuth.familyMembers || [];
+            const familyCode = familyAuth.familyCode;
+            const children = appData.children || [];
+
+            const signedOutBlock = `
+                <div style="background:var(--bg);border-radius:14px;padding:14px;margin-bottom:16px;text-align:center;">
+                    <div style="font-size:13px;color:var(--text-light);">Sign in or create an account to share access with family members.</div>
+                    <button class="btn btn-primary" style="margin-top:10px;" onclick="this.closest('.modal').remove();document.getElementById('authScreen').classList.add('active');">Create Account</button>
+                </div>`;
+
+            // The invite code that actually grants access is per child. This is
+            // deliberate: sharing one child with that child's other parent must
+            // never hand over a sibling's records too.
+            const childShareBlock = children.length > 0 ? `
+                <div class="report-section-title">Invite someone to a child</div>
+                <div style="font-size:12px;color:var(--text-light);line-height:1.6;margin-bottom:10px;">
+                    Each child has their own invite code. Someone who joins with it sees
+                    <strong>only that child</strong> — never their siblings.
+                </div>
+                ${children.map(child => {
+                    const code = child.shareCode;
+                    return `
+                    <div style="background:var(--bg);border-radius:14px;padding:12px 14px;margin-bottom:10px;">
+                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                            <span style="font-size:18px;">${escapeHtml(child.emoji || '👧🏾')}</span>
+                            <span style="font-size:14px;font-weight:700;">${escapeHtml(child.name)}</span>
                         </div>
-                    `).join('')}` : `
-                    <div style="font-size:13px;color:var(--text-light);text-align:center;padding:16px;">
-                        No family members yet. Share your family code to invite others!
-                    </div>`}
+                        ${code ? `
+                        <div style="font-size:20px;font-weight:800;font-family:'Sora',sans-serif;
+                                    letter-spacing:.12em;color:var(--text);margin-bottom:8px;">${escapeHtml(code)}</div>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                            <button data-share-code="${escapeHtml(code)}" data-child-name="${escapeHtml(child.name)}"
+                                style="background:var(--primary);color:white;border:none;border-radius:10px;
+                                       padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Sora',sans-serif;">
+                                Share invite
+                            </button>
+                            <button data-copy-code="${escapeHtml(code)}"
+                                style="background:var(--card-bg);color:var(--text-mid);border:1px solid var(--border);
+                                       border-radius:10px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Sora',sans-serif;">
+                                Copy code
+                            </button>
+                            <button data-rotate-child="${escapeHtml(child.id)}"
+                                style="background:none;color:var(--text-light);border:none;
+                                       padding:7px 6px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Sora',sans-serif;">
+                                New code
+                            </button>
+                        </div>` : `
+                        <div style="font-size:12px;color:var(--text-light);">
+                            This child hasn't synced to the cloud yet — sign in and reopen to get an invite code.
+                        </div>`}
+                    </div>`;
+                }).join('')}` : '';
 
-                    ${members.length > 0 && auth && auth.permissions === 'admin' ? `
-                    <div class="report-section-title">Permissions Guide</div>
-                    <div style="font-size:12px;line-height:1.8;color:var(--text-light);">
-                        <span class="permission-badge perm-admin">Admin</span> — Full access + manage members<br>
-                        <span class="permission-badge perm-full">Full Access</span> — View + add logs for all children<br>
-                        <span class="permission-badge perm-view">View Only</span> — Read-only access to all data
-                    </div>` : ''}
+            const familyCodeBlock = familyCode ? `
+                <div class="report-section-title">Your household code</div>
+                <div style="background:linear-gradient(135deg,var(--primary-faint),var(--purple-light));
+                            border-radius:14px;padding:14px 16px;margin-bottom:16px;text-align:center;">
+                    <div style="font-size:22px;font-weight:800;font-family:'Sora',sans-serif;color:var(--text);letter-spacing:.1em;">${escapeHtml(familyCode)}</div>
+                    <div style="font-size:11px;color:var(--text-light);margin-top:6px;line-height:1.5;">
+                        Joins someone to your household only. It does <strong>not</strong> give
+                        access to any child's records — use a child's invite code for that.
+                    </div>
+                    <button data-copy-code="${escapeHtml(familyCode)}"
+                        style="margin-top:8px;background:var(--primary);color:white;border:none;border-radius:10px;
+                               padding:6px 16px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Sora',sans-serif;">
+                        Copy Code
+                    </button>
+                </div>` : '';
 
+            const membersBlock = members.length > 0 ? `
+                <div class="report-section-title">People with access (${members.length})</div>
+                ${members.map(m => {
+                    const joined = formatJoinedDate(m.joinedAt);
+                    const seeing = (m.childNames && m.childNames.length)
+                        ? `Can see ${escapeHtml(m.childNames.join(', '))}`
+                        : 'No children shared yet';
+                    return `
+                    <div class="member-item">
+                        <div class="member-avatar">${escapeHtml(memberInitial(m))}</div>
+                        <div class="member-info">
+                            <div class="member-name">${escapeHtml(m.name)}${m.isPrimary ? ' ⭐' : ''}${m.isYou ? ' (you)' : ''}</div>
+                            <div class="member-role">${seeing}${joined ? ` · Joined ${joined}` : ''}</div>
+                        </div>
+                        <span class="permission-badge ${m.permissions === 'admin' ? 'perm-admin' : m.permissions === 'full' ? 'perm-full' : 'perm-view'}">
+                            ${m.permissions === 'admin' ? 'Admin' : m.permissions === 'full' ? 'Full Access' : 'View Only'}
+                        </span>
+                    </div>`;
+                }).join('')}` : `
+                <div style="font-size:13px;color:var(--text-light);text-align:center;padding:16px;">
+                    No one else has access yet. Share a child's invite code above to add someone.
+                </div>`;
+
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width:460px;">
+                    <button class="modal-close" onclick="this.closest('.modal').remove()">×</button>
+                    <div class="modal-title">👨‍👩‍👧‍👦 Family &amp; Sharing</div>
+                    ${auth ? '' : signedOutBlock}
+                    ${auth ? childShareBlock : ''}
+                    ${auth ? familyCodeBlock : ''}
+                    ${auth ? membersBlock : ''}
                     <button class="btn btn-secondary btn-full" style="margin-top:16px;" onclick="this.closest('.modal').remove();document.getElementById('authScreen').classList.add('active');">
                         ${auth ? 'Switch Account' : 'Sign In / Create Account'}
                     </button>
                 </div>
             `;
-            document.body.appendChild(modal);
+
+            // Listeners rather than inline onclick: a name or code with a quote
+            // in it would otherwise break out of the attribute.
+            modal.querySelectorAll('[data-copy-code]').forEach(btn => {
+                btn.addEventListener('click', () => copyTextToClipboard(btn.dataset.copyCode));
+            });
+            modal.querySelectorAll('[data-share-code]').forEach(btn => {
+                btn.addEventListener('click', () => shareInviteCode(btn.dataset.shareCode, btn.dataset.childName));
+            });
+            modal.querySelectorAll('[data-rotate-child]').forEach(btn => {
+                btn.addEventListener('click', () => rotateChildShareCode(btn.dataset.rotateChild, modal));
+            });
+        }
+
+        // Lets a parent revoke an invite that's been passed around. Existing
+        // caregivers keep their access; only the code itself changes.
+        async function rotateChildShareCode(childId, modal) {
+            const child = appData.children.find(c => c.id === childId);
+            if (!child) return;
+            if (!confirm(`Generate a new invite code for ${child.name}?\n\nThe old code stops working. Anyone already added keeps their access.`)) return;
+
+            if (cloudIsOffline()) {
+                alert('You appear to be offline. Reconnect and try again.');
+                return;
+            }
+
+            const { data, error } = await sb.rpc('rotate_child_share_code', { p_child_id: childId });
+            if (error || !data) {
+                alert('We couldn\'t generate a new code just now. Please try again in a moment.');
+                console.warn('[SickleStrong] rotate share code failed', error);
+                return;
+            }
+            child.shareCode = data;
+            saveData();
+            renderFamilyMembersModal(modal);
+            alert(`New invite code for ${child.name}: ${data}`);
         }
 
         function updateFamilyMembersPreview() {
@@ -7372,13 +7855,13 @@
                                         background:linear-gradient(135deg,var(--primary),var(--purple));
                                         display:flex;align-items:center;justify-content:center;
                                         color:white;font-size:11px;font-weight:700;">
-                                ${m.name.charAt(0).toUpperCase()}
+                                ${escapeHtml(memberInitial(m))}
                             </div>
-                            <span style="font-size:12px;font-weight:600;">${m.name.split(' ')[0]}</span>
+                            <span style="font-size:12px;font-weight:600;">${escapeHtml(memberFirstName(m))}</span>
                         </div>
                     `).join('')}
                     <div style="font-size:12px;color:var(--text-light);">
-                        ${members.length}/5 members · Family Code: <strong>${familyAuth.familyCode}</strong>
+                        ${members.length} with access${familyAuth.familyCode ? ` · Household: <strong>${escapeHtml(familyAuth.familyCode)}</strong>` : ''}
                     </div>
                 </div>
             `;
@@ -7736,40 +8219,55 @@
             const quoteEl = document.getElementById('dailyQuote');
             if (quoteEl) quoteEl.textContent = getDailyQuote();
 
-            // Check for active Supabase session and sync data
-            const { data: { session } } = await sb.auth.getSession();
-            if (session) {
-                familyAuth.isLoggedIn = true;
-                localStorage.setItem('ss_auth_dismissed', 'true');
-                // Clicking the confirmation link can land here with a live
-                // session without ever passing through handleLogin, so this
-                // path has to provision too. No-op once set up.
-                await ensureUserProvisioned(session.user);
-                await syncAllFromCloud();
+            // Cloud work is best-effort: a network failure here must never stop
+            // the wizard or the main app from rendering below.
+            try {
+                const { data: { session } } = await sb.auth.getSession();
+                if (session) {
+                    familyAuth.isLoggedIn = true;
+                    localStorage.setItem('ss_auth_dismissed', 'true');
+                    // Clicking the confirmation link can land here with a live
+                    // session without ever passing through handleLogin, so this
+                    // path has to provision too. No-op once set up.
+                    await ensureUserProvisioned(session.user);
+                    await syncAllFromCloud();
+                }
+            } catch (err) {
+                console.warn('[SickleStrong] cloud restore failed, continuing offline', err);
             }
 
-            if (!appData.setupComplete) {
-                document.getElementById('setupWizard').classList.add('active');
-                renderWizard();
-            } else {
-                document.getElementById('mainApp').style.display = 'block';
-                updateUI();
-                updateFamilyMembersPreview();
-                updateNotificationUI();
-                renderCommunityPosts();
+            try {
+                if (!appData.setupComplete) {
+                    document.getElementById('setupWizard').classList.add('active');
+                    renderWizard();
+                } else {
+                    document.getElementById('mainApp').style.display = 'block';
+                    updateUI();
+                    updateFamilyMembersPreview();
+                    updateNotificationUI();
+                    renderCommunityPosts();
 
-                const hasAccount = localStorage.getItem('ss_auth');
-                const authDismissed = localStorage.getItem('ss_auth_dismissed');
+                    const hasAccount = localStorage.getItem('ss_auth');
+                    const authDismissed = localStorage.getItem('ss_auth_dismissed');
 
-                if (!hasAccount && !authDismissed) {
-                    setTimeout(() => {
-                        const authScreen = document.getElementById('authScreen');
-                        if (authScreen) authScreen.classList.add('active');
-                    }, 1500);
+                    if (!hasAccount && !authDismissed) {
+                        setTimeout(() => {
+                            const authScreen = document.getElementById('authScreen');
+                            if (authScreen) authScreen.classList.add('active');
+                        }, 1500);
+                    }
+
+                    if (appData.notificationsEnabled) {
+                        scheduleMedicationReminders();
+                    }
                 }
-
-                if (appData.notificationsEnabled) {
-                    scheduleMedicationReminders();
+            } catch (err) {
+                // Last resort: never leave a family looking at a blank page.
+                console.error('[SickleStrong] render failed', err);
+                const wizardOpen = document.getElementById('setupWizard')?.classList.contains('active');
+                if (!wizardOpen) {
+                    const mainApp = document.getElementById('mainApp');
+                    if (mainApp) mainApp.style.display = 'block';
                 }
             }
 
