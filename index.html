@@ -3901,6 +3901,12 @@
                         child.shareCode = saved.share_code || null; // invite code for this child
                         appData.currentChildId = saved.id;
                         saveData();
+                    } else {
+                        // Local-only child: it tracks fine, but it has no share
+                        // code, so per-child inviting won't work until it syncs.
+                        // Silence here left people with a Family & Sharing screen
+                        // that just didn't offer a code, with no explanation.
+                        showToast(`${child.name}'s profile is saved on this device, but didn't reach the cloud. Sharing will be available once it syncs.`, 'warning');
                     }
                     await _pushMeds(child.medications, child.id, familyId);
                 }
@@ -7054,9 +7060,27 @@
 
         // ── SUPABASE PUSH HELPERS (fire-and-forget) ───────────────────────
 
+        // crypto.randomUUID exists only in secure contexts. The app is served
+        // over HTTPS so it normally does, but child creation is too important to
+        // let a missing API break it outright.
+        function newUUID() {
+            if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+                return crypto.randomUUID();
+            }
+            return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, ch => {
+                const r = Math.random() * 16 | 0;
+                return (ch === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+            });
+        }
+
         async function _pushChild(childData, familyId) {
             const isUUID = typeof childData.id === 'string' && /^[0-9a-f-]{36}$/.test(childData.id);
+            // The id used to come from the column default, which meant a brand-new
+            // child had no id to read back by. Minting it here makes the follow-up
+            // read below possible.
+            const id = isUUID ? childData.id : newUUID();
             const payload = {
+                id,
                 family_id: familyId,
                 name: childData.name,
                 birth_date: childData.birthDate || null,
@@ -7072,8 +7096,28 @@
                 last_stroke_screen: childData.lastStrokeScreen || null,
                 stroke_screen_result: childData.strokeScreenResult || null
             };
-            if (isUUID) payload.id = childData.id;
-            const { data } = await sb.from('children').upsert(payload, { onConflict: 'id' }).select().single();
+
+            const { error: upsertError } = await sb.from('children').upsert(payload, { onConflict: 'id' });
+            if (upsertError) {
+                console.warn('[SickleStrong] child upsert failed', upsertError);
+                return null;
+            }
+
+            // Deliberately a second round-trip. Chaining .select() onto the upsert
+            // makes it INSERT ... RETURNING, and RETURNING is checked against
+            // children_select — which requires a child_access row via
+            // accessible_child_ids(). The owner grant comes from an AFTER INSERT
+            // trigger, so it hasn't run yet, and accessible_child_ids() is STABLE
+            // and reads the statement's snapshot regardless. The insert failed with
+            // "new row violates row-level security policy" and rolled back
+            // completely, so no child was ever created. A separate statement sees
+            // the committed grant and reads back fine.
+            const { data, error: selectError } = await sb
+                .from('children').select().eq('id', id).single();
+            if (selectError) {
+                console.warn('[SickleStrong] could not read back newly created child', selectError);
+                return null;
+            }
             return data;
         }
 
@@ -8186,6 +8230,40 @@
         function dismissInstallBanner() {
             localStorage.setItem('ss_install_dismissed', 'true');
             document.getElementById('installBanner')?.remove();
+        }
+
+        // ── TOAST ────────────────────────────────────────────────────────
+        // For things worth saying but not worth interrupting for. alert() blocks
+        // the whole app, which is wrong mid-onboarding.
+        function showToast(message, tone) {
+            document.getElementById('ssToast')?.remove();
+
+            const toast = document.createElement('div');
+            toast.id = 'ssToast';
+            const bg = tone === 'warning' ? 'var(--warning-light)' : 'var(--card-bg)';
+            const fg = tone === 'warning' ? '#7a4a00' : 'var(--text)';
+            toast.style.cssText = `
+                position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom,0px));
+                transform:translate(-50%,12px);z-index:4000;
+                max-width:min(420px,calc(100vw - 32px));
+                background:${bg};color:${fg};
+                border:1px solid var(--border);border-radius:14px;
+                box-shadow:0 8px 28px var(--shadow);
+                padding:12px 16px;font-size:13px;line-height:1.5;font-weight:600;
+                opacity:0;transition:opacity .2s ease, transform .2s ease;`;
+            toast.setAttribute('role', 'status');
+            toast.textContent = message;
+            document.body.appendChild(toast);
+
+            requestAnimationFrame(() => {
+                toast.style.opacity = '1';
+                toast.style.transform = 'translate(-50%,0)';
+            });
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translate(-50%,12px)';
+                setTimeout(() => toast.remove(), 250);
+            }, 6000);
         }
 
         // ── OFFLINE INDICATOR ────────────────────────────────────────────
