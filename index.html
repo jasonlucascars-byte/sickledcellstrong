@@ -7097,21 +7097,31 @@
                 stroke_screen_result: childData.strokeScreenResult || null
             };
 
-            const { error: upsertError } = await sb.from('children').upsert(payload, { onConflict: 'id' });
-            if (upsertError) {
-                console.warn('[SickleStrong] child upsert failed', upsertError);
+            // A brand-new child has to go in via insert(), not upsert().
+            // supabase-js compiles .upsert() to INSERT ... ON CONFLICT DO UPDATE,
+            // and under RLS that form requires UPDATE to be permitted on the
+            // table up front — Postgres checks it whether or not any row actually
+            // conflicts. children_update is scoped to accessible_child_ids(), and
+            // the owner grant doesn't exist until the AFTER INSERT trigger fires,
+            // so the statement aborted with "new row violates row-level security
+            // policy" and the child was never created at all. A plain insert()
+            // never brings the UPDATE policy into it. Once the child exists and
+            // the grant is in place, upsert() is right for edits.
+            const { error: writeError } = isUUID
+                ? await sb.from('children').upsert(payload, { onConflict: 'id' })
+                : await sb.from('children').insert(payload);
+            if (writeError) {
+                console.warn('[SickleStrong] child write failed', writeError);
                 return null;
             }
 
-            // Deliberately a second round-trip. Chaining .select() onto the upsert
+            // Deliberately a second round-trip. Chaining .select() onto the write
             // makes it INSERT ... RETURNING, and RETURNING is checked against
-            // children_select — which requires a child_access row via
+            // children_select — which also requires a child_access row via
             // accessible_child_ids(). The owner grant comes from an AFTER INSERT
             // trigger, so it hasn't run yet, and accessible_child_ids() is STABLE
-            // and reads the statement's snapshot regardless. The insert failed with
-            // "new row violates row-level security policy" and rolled back
-            // completely, so no child was ever created. A separate statement sees
-            // the committed grant and reads back fine.
+            // and reads the statement's snapshot regardless. A separate statement
+            // sees the committed grant and reads back fine.
             const { data, error: selectError } = await sb
                 .from('children').select().eq('id', id).single();
             if (selectError) {
