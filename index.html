@@ -1008,6 +1008,55 @@
             color: var(--emergency);
             margin: 2px;
         }
+        .invite-choice {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 12px 14px;
+            border: 1.5px solid var(--border);
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 13px;
+            line-height: 1.45;
+            background: var(--card-bg);
+            transition: border-color .15s ease, background .15s ease;
+        }
+        .invite-choice:has(input:checked) {
+            border-color: var(--primary);
+            background: var(--primary-faint);
+        }
+        .invite-choice input { margin-top: 3px; flex-shrink: 0; accent-color: var(--primary); }
+        .invite-choice-sub { color: var(--text-light); font-size: 12px; }
+
+        .circle-card {
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 14px;
+            margin-bottom: 14px;
+            background: var(--card-bg);
+        }
+        .circle-head {
+            display: flex; align-items: center; gap: 8px;
+            margin-bottom: 10px; font-weight: 700; font-size: 15px;
+        }
+        .circle-person {
+            display: flex; align-items: center; gap: 10px;
+            padding: 9px 0; border-top: 1px solid var(--border);
+        }
+        .circle-person-info { flex: 1; min-width: 0; }
+        .circle-person-name { font-size: 13px; font-weight: 700; }
+        .circle-person-meta { font-size: 11px; color: var(--text-light); }
+        .circle-action {
+            background: none; border: 1px solid var(--border); border-radius: 9px;
+            padding: 5px 11px; font-size: 12px; font-weight: 600; cursor: pointer;
+            font-family: 'Sora', sans-serif; color: var(--text-mid); flex-shrink: 0;
+        }
+        .circle-action.danger { color: var(--emergency); border-color: var(--emergency-light); }
+        .invite-pending {
+            display: flex; align-items: center; gap: 10px;
+            padding: 9px 0; border-top: 1px dashed var(--border);
+        }
+
         .share-token-box {
             background: var(--primary-faint);
             border: 1.5px dashed var(--primary);
@@ -7019,15 +7068,23 @@
         // Who else can see the children this account has access to. There is no
         // FK between child_access and public.users (both point at auth.users),
         // so PostgREST can't embed them — two queries, both RLS-filtered.
+        // Who is on each child's circle, and what the signed-in user may do there.
+        // Access is per child, so this is grouped per child rather than flattened
+        // into one household list: someone can be a parent on one child and a
+        // view-only caregiver on another.
         async function loadFamilyMembers() {
             if (sb.isOffline) { return; }
             try {
                 const { data: { user } } = await sb.auth.getUser();
-                if (!user) { familyAuth.familyMembers = []; return; }
+                if (!user) { familyAuth.familyMembers = []; familyAuth.childCircles = []; return; }
+                familyAuth.authId = user.id;
 
                 const { data: access } = await sb
-                    .from('child_access').select('auth_id, child_id, permission, created_at');
-                if (!access || access.length === 0) { familyAuth.familyMembers = []; return; }
+                    .from('child_access')
+                    .select('auth_id, child_id, permission, circle_role, created_at');
+                if (!access || access.length === 0) {
+                    familyAuth.familyMembers = []; familyAuth.childCircles = []; return;
+                }
 
                 const authIds = [...new Set(access.map(a => a.auth_id))];
                 const { data: people } = await sb
@@ -7035,10 +7092,52 @@
                     .select('auth_id, full_name, email, role, is_primary, created_at')
                     .in('auth_id', authIds);
 
-                const childName = (id) => appData.children.find(c => c.id === id)?.name || 'a child';
+                // child_invites_select only returns rows for children where this
+                // user is a parent, so an empty result is a legitimate answer for
+                // a caregiver rather than an error.
+                const { data: invites } = await sb
+                    .from('child_invites')
+                    .select('id, child_id, code, permission, circle_role, created_at, expires_at, used_at, revoked_at');
 
+                const personFor = (authId) => (people || []).find(p => p.auth_id === authId);
+                const displayName = (p, authId) =>
+                    (p && (p.full_name || p.email)) || (authId === user.id ? 'You' : 'Family member');
+
+                const childIds = [...new Set(access.map(a => a.child_id))];
+                familyAuth.childCircles = childIds.map(childId => {
+                    const child = appData.children.find(c => c.id === childId);
+                    const rows = access.filter(a => a.child_id === childId);
+                    const mine = rows.find(a => a.auth_id === user.id);
+                    return {
+                        childId,
+                        childName: child?.name || 'This child',
+                        emoji: child?.emoji || '👧🏾',
+                        // Only a parent may invite, remove others, or deactivate.
+                        isParent: mine?.circle_role === 'parent',
+                        myPermission: mine?.permission || 'view',
+                        members: rows.map(r => {
+                            const p = personFor(r.auth_id);
+                            return {
+                                authId: r.auth_id,
+                                name: displayName(p, r.auth_id),
+                                email: p?.email || null,
+                                permission: r.permission || 'view',
+                                circleRole: r.circle_role || 'caregiver',
+                                isYou: r.auth_id === user.id,
+                                joinedAt: r.created_at || p?.created_at || null
+                            };
+                        }).sort((a, b) => (b.isYou ? 1 : 0) - (a.isYou ? 1 : 0)),
+                        pendingInvites: (invites || [])
+                            .filter(i => i.child_id === childId && !i.used_at && !i.revoked_at
+                                         && new Date(i.expires_at) > new Date())
+                            .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+                    };
+                });
+
+                // Flat list, still used by the dashboard preview strip.
                 familyAuth.familyMembers = (people || []).map(p => {
                     const rows = access.filter(a => a.auth_id === p.auth_id);
+                    const childName = (id) => appData.children.find(c => c.id === id)?.name || 'a child';
                     return {
                         id: p.auth_id,
                         name: p.full_name || p.email || 'Family member',
@@ -7046,15 +7145,28 @@
                         role: p.role || 'caregiver',
                         isPrimary: p.is_primary,
                         isYou: p.auth_id === user.id,
-                        // 'admin' isn't a child_access permission — the account
-                        // that created the child is the one who can manage it.
-                        permissions: p.is_primary ? 'admin' : (rows[0]?.permission || 'view'),
+                        permissions: rows.some(r => r.circle_role === 'parent') ? 'admin'
+                                   : (rows[0]?.permission === 'full' ? 'full' : 'view'),
                         joinedAt: rows.map(r => r.created_at).sort()[0] || p.created_at || null,
                         childNames: rows.map(r => childName(r.child_id))
                     };
                 }).sort((a, b) => (b.isYou ? 1 : 0) - (a.isYou ? 1 : 0));
             } catch (err) {
                 console.warn('[SickleStrong] could not load family members', err);
+            }
+        }
+
+        // Deactivated children drop out of syncAllFromCloud (it filters on
+        // is_active), so they have to be fetched separately to be reactivatable.
+        async function loadInactiveChildren() {
+            if (sb.isOffline) return [];
+            try {
+                const { data } = await sb.from('children')
+                    .select('id, name, emoji').eq('is_active', false);
+                return data || [];
+            } catch (err) {
+                console.warn('[SickleStrong] could not load inactive children', err);
+                return [];
             }
         }
 
@@ -7247,7 +7359,11 @@
             isLoggedIn: false,
             currentUser: null,
             familyMembers: [],
-            familyCode: null
+            familyCode: null,
+            authId: null,
+            // Per-child circles: who has access to each child, their permission
+            // and role, plus that child's outstanding invites.
+            childCircles: []
         };
 
         // Names and codes get interpolated into innerHTML templates below.
@@ -7302,11 +7418,12 @@
         }
 
         // The native share sheet is the path most families actually use — it
-        // gets the code into Messages or WhatsApp without a copy/paste step.
+        // gets the invite into Messages or WhatsApp without a copy/paste step.
         async function shareInviteCode(code, childName) {
+            const link = inviteLinkFor(code);
             const message = childName
-                ? `Join ${childName}'s SickleStrong care team with this invite code: ${code}\n\nOpen the app, enter the code under "Join a family", and you'll see ${childName}'s health records.`
-                : `Join our family on SickleStrong with this code: ${code}`;
+                ? `Join ${childName}'s care team on SickleStrong:\n\n${link}\n\nThe link works for 14 days.`
+                : `Join our family on SickleStrong:\n\n${link}`;
             if (navigator.share) {
                 try {
                     await navigator.share({ title: 'SickleStrong invite', text: message });
@@ -7317,6 +7434,192 @@
                 }
             }
             copyTextToClipboard(message, code);
+        }
+
+        // A tappable link, so an invite can go out as a text message and the
+        // recipient never has to type a code by hand. Built from the current
+        // origin so it works on preview deploys and localhost too.
+        function inviteLinkFor(code) {
+            const base = (location.origin && location.origin !== 'null')
+                ? location.origin + location.pathname.replace(/index\.html$/, '')
+                : 'https://sicklestrong-v2.netlify.app/';
+            return `${base}?invite=${encodeURIComponent(code)}`;
+        }
+
+        // redeem_child_invite raises these. Expired and already-used are the
+        // ordinary cases — an old text message reopened months later — so they
+        // read as normal, not as something being broken.
+        function inviteErrorMessage(error, childName) {
+            const raw = (error && error.message) || '';
+            const who = childName ? `${childName}'s` : 'this';
+            if (raw.includes('INVITE_EXPIRED')) {
+                return `This invite link has expired.\n\nInvites are good for 14 days. Ask for a fresh one and it'll work straight away.`;
+            }
+            if (raw.includes('INVITE_ALREADY_USED')) {
+                return `This invite link has already been used.\n\nIf that was you, just sign in — you already have access. If not, ask for a new link.`;
+            }
+            if (raw.includes('INVITE_REVOKED')) {
+                return `This invite link was cancelled.\n\nAsk whoever sent it to share a new one.`;
+            }
+            if (raw.includes('INVALID_INVITE_CODE')) {
+                return `We didn't recognise that invite link.\n\nIt may have been cut short by the app it was sent in — ask for it again.`;
+            }
+            if (raw.includes('CHILD_NOT_FOUND')) {
+                return `That invite is no longer available.\n\nThe profile it pointed to has been removed.`;
+            }
+            if (raw.includes('CHILD_CAREGIVER_LIMIT')) {
+                return `${who} care team is already full at 5 people.\n\nSomeone will need to be removed before another person can join.`;
+            }
+            if (raw.includes('NOT_AUTHENTICATED')) {
+                return `Please sign in first, then open the invite link again.`;
+            }
+            if (cloudIsOffline()) {
+                return `You appear to be offline. Reconnect and open the link again — nothing was lost.`;
+            }
+            return null;
+        }
+
+        function permissionLabel(permission) {
+            return permission === 'full' ? 'Full Access' : 'View Only';
+        }
+
+        function circleRoleLabel(role) {
+            return role === 'parent' ? 'Co-Parent' : 'Caregiver';
+        }
+
+        // ── INVITING SOMEONE TO A CHILD ──────────────────────────────────
+        // Permission and role are chosen here, by the parent sending the
+        // invite, and travel on the invite record. The person redeeming never
+        // picks their own — that's the whole point of the invite carrying them.
+        function showInviteComposer(childId) {
+            const circle = (familyAuth.childCircles || []).find(c => c.childId === childId);
+            if (!circle) return;
+            if (!circle.isParent) {
+                showToast('Only a co-parent can invite people to this child.', 'warning');
+                return;
+            }
+
+            const modal = document.createElement('div');
+            modal.className = 'modal active';
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width:440px;">
+                    <button class="modal-close" onclick="this.closest('.modal').remove()">×</button>
+                    <div class="modal-title">💌 Invite someone to ${escapeHtml(circle.childName)}</div>
+                    <p style="font-size:13px;color:var(--text-light);line-height:1.6;margin-bottom:16px;">
+                        They'll see <strong>${escapeHtml(circle.childName)}</strong> only — never any other child.
+                    </p>
+
+                    <div class="report-section-title">What can they do?</div>
+                    <div id="invitePermission" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
+                        <label class="invite-choice" data-value="full">
+                            <input type="radio" name="invitePerm" value="full" checked />
+                            <span><strong>Full Access</strong><br><span class="invite-choice-sub">Can view records and log care</span></span>
+                        </label>
+                        <label class="invite-choice" data-value="view">
+                            <input type="radio" name="invitePerm" value="view" />
+                            <span><strong>View Only</strong><br><span class="invite-choice-sub">Can see records but not change anything</span></span>
+                        </label>
+                    </div>
+
+                    <div class="report-section-title">What kind of role?</div>
+                    <div id="inviteRole" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
+                        <label class="invite-choice" data-value="caregiver">
+                            <input type="radio" name="inviteRole" value="caregiver" checked />
+                            <span><strong>Caregiver</strong><br><span class="invite-choice-sub">Can view and log care, can't manage who else has access</span></span>
+                        </label>
+                        <label class="invite-choice" data-value="parent">
+                            <input type="radio" name="inviteRole" value="parent" />
+                            <span><strong>Co-Parent</strong><br><span class="invite-choice-sub">Can also manage who has access, and remove this child</span></span>
+                        </label>
+                    </div>
+
+                    <div id="inviteError" style="display:none;font-size:13px;color:var(--emergency);margin-bottom:10px;"></div>
+                    <button class="btn btn-primary btn-full" id="inviteGenerate">Create invite link</button>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            modal.querySelector('#inviteGenerate')
+                .addEventListener('click', () => generateInvite(circle, modal));
+        }
+
+        async function generateInvite(circle, modal) {
+            const permission = modal.querySelector('input[name="invitePerm"]:checked')?.value || 'full';
+            const circleRole = modal.querySelector('input[name="inviteRole"]:checked')?.value || 'caregiver';
+            const errorEl = modal.querySelector('#inviteError');
+            const button = modal.querySelector('#inviteGenerate');
+
+            const showError = (msg) => {
+                errorEl.textContent = msg;
+                errorEl.style.display = 'block';
+                button.disabled = false;
+                button.textContent = 'Create invite link';
+            };
+
+            if (cloudIsOffline()) {
+                return showError('You appear to be offline. Reconnect and try again.');
+            }
+
+            button.disabled = true;
+            button.textContent = 'Creating…';
+            errorEl.style.display = 'none';
+
+            const { data, error } = await sb.rpc('generate_child_invite', {
+                p_child_id: circle.childId,
+                p_permission: permission,
+                p_circle_role: circleRole
+            });
+
+            if (error || !data || data.length === 0) {
+                console.warn('[SickleStrong] invite generation failed', error);
+                const raw = (error && error.message) || '';
+                if (raw.includes('NOT_A_PARENT_FOR_THIS_CHILD')) {
+                    return showError('Only a co-parent can invite people to this child.');
+                }
+                return showError('We couldn\'t create an invite just now. Please try again in a moment.');
+            }
+
+            const { out_code: code, out_expires_at: expiresAt } = data[0];
+            showInviteReady(circle, code, expiresAt, permission, circleRole, modal);
+        }
+
+        function showInviteReady(circle, code, expiresAt, permission, circleRole, modal) {
+            const expires = new Date(expiresAt);
+            const expiresText = isNaN(expires.getTime())
+                ? 'in 14 days'
+                : `on ${expires.toLocaleDateString('en-US', { month: 'long', day: 'numeric' })}`;
+            const link = inviteLinkFor(code);
+
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width:440px;">
+                    <button class="modal-close" onclick="this.closest('.modal').remove()">×</button>
+                    <div class="modal-title">💌 Invite ready</div>
+                    <p style="font-size:13px;color:var(--text-light);line-height:1.6;margin-bottom:14px;">
+                        Send this to the person joining ${escapeHtml(circle.childName)}'s care team.
+                        They'll join as <strong>${escapeHtml(circleRoleLabel(circleRole))}</strong>
+                        with <strong>${escapeHtml(permissionLabel(permission))}</strong>.
+                    </p>
+
+                    <div style="background:linear-gradient(135deg,var(--primary-faint),var(--purple-light));
+                                border-radius:14px;padding:14px 16px;margin-bottom:12px;text-align:center;">
+                        <div style="font-size:20px;font-weight:800;font-family:'Sora',sans-serif;
+                                    letter-spacing:.08em;color:var(--text);">${escapeHtml(code)}</div>
+                        <div style="font-size:11px;color:var(--text-light);margin-top:8px;word-break:break-all;">${escapeHtml(link)}</div>
+                    </div>
+                    <p style="font-size:12px;color:var(--text-light);margin-bottom:16px;text-align:center;">
+                        This link stops working ${escapeHtml(expiresText)}, or once it's been used.
+                    </p>
+
+                    <button class="btn btn-primary btn-full" id="inviteShare" style="margin-bottom:8px;">Send invite</button>
+                    <button class="btn btn-secondary btn-full" id="inviteCopy">Copy link</button>
+                </div>
+            `;
+            modal.querySelector('#inviteShare')
+                .addEventListener('click', () => shareInviteCode(code, circle.childName));
+            modal.querySelector('#inviteCopy')
+                .addEventListener('click', () => copyTextToClipboard(link, code));
+
+            // Refresh the sharing screen underneath so the new pending invite shows.
+            refreshFamilyModal();
         }
 
         function generateFamilyCode() {
@@ -7363,6 +7666,29 @@
                 return;
             }
 
+            // Redeem before provisioning, so someone whose first contact with
+            // the app is an invite lands in that child's household rather than
+            // getting a fresh one of their own.
+            await redeemPendingInviteFromMetadata(data.user);
+
+            // Someone with an existing account who opened an invite link and
+            // chose "I already have an account" finishes here.
+            let invitedChildName = null;
+            if (_pendingInviteAfterLogin) {
+                const code = _pendingInviteAfterLogin;
+                _pendingInviteAfterLogin = null;
+                const { data: redeemed, error: redeemError } = await sb.rpc('redeem_child_invite', {
+                    p_code: code, p_full_name: null
+                });
+                if (redeemError || !redeemed || redeemed.length === 0) {
+                    console.warn('[SickleStrong] invite redemption after login failed', redeemError);
+                    const message = inviteErrorMessage(redeemError);
+                    if (message) setTimeout(() => alert(message), 400);
+                } else {
+                    invitedChildName = redeemed[0].out_child_name;
+                }
+            }
+
             // First login after email confirmation is where family setup
             // actually happens — signup couldn't do it without a session.
             // No-ops for accounts that are already set up.
@@ -7392,7 +7718,10 @@
             await syncAllFromCloud();
             updateFamilyMembersPreview();
 
-            if (prov.joinedChildName) {
+            if (invitedChildName) {
+                trackFamilyMemberJoined();
+                alert(`Welcome back! 💙\n\nYou're on ${invitedChildName}'s care team.`);
+            } else if (prov.joinedChildName) {
                 trackFamilyMemberJoined();
                 alert(`Welcome, ${profile.full_name}! 💙\n\nYou're connected to ${prov.joinedChildName}'s care team.`);
             } else if (prov.created) {
@@ -7630,6 +7959,198 @@
             setTimeout(() => modal.querySelector('#joinName')?.focus(), 50);
         }
 
+        // ── INVITE LINKS (?invite=INV-XXXXXXXX) ──────────────────────────
+
+        function readInviteFromUrl() {
+            try {
+                const params = new URLSearchParams(location.search);
+                const raw = params.get('invite');
+                if (!raw) return null;
+                const code = raw.trim().toUpperCase();
+                // Strip it from the address bar so a refresh doesn't retry a
+                // now-used invite and show a confusing "already used".
+                const url = new URL(location.href);
+                url.searchParams.delete('invite');
+                history.replaceState({}, '', url.pathname + url.search + url.hash);
+                return /^INV-[A-Z0-9]{8}$/.test(code) ? code : { invalid: code };
+            } catch (err) {
+                console.warn('[SickleStrong] could not read invite from URL', err);
+                return null;
+            }
+        }
+
+        async function handleInviteLink(invite) {
+            if (invite && invite.invalid !== undefined) {
+                alert("We didn't recognise that invite link.\n\nIt may have been cut short by the app it was sent in — ask for it again.");
+                return;
+            }
+            if (cloudIsOffline()) {
+                alert("You appear to be offline.\n\nConnect to the internet and open the link again — the invite is still good.");
+                return;
+            }
+
+            const { data: { session } } = await sb.auth.getSession();
+            if (session) {
+                await redeemInviteNow(invite, null);
+                return;
+            }
+            // Not signed in yet — collect details, then redeem once there's a session.
+            showInviteSignupModal(invite);
+        }
+
+        // Permission and role come from the invite record; nothing here lets the
+        // person joining choose their own.
+        async function redeemInviteNow(code, fullName) {
+            const { data, error } = await sb.rpc('redeem_child_invite', {
+                p_code: code,
+                p_full_name: fullName || null
+            });
+
+            if (error || !data || data.length === 0) {
+                const message = inviteErrorMessage(error);
+                console.warn('[SickleStrong] invite redemption failed', error);
+                alert(message || "We couldn't open that invite just now. Please try again in a moment.");
+                return false;
+            }
+
+            const row = data[0];
+            familyAuth.isLoggedIn = true;
+            familyAuth.familyCode = row.out_family_code;
+            localStorage.setItem('ss_auth_dismissed', 'true');
+
+            closeAuthScreen();
+            await syncAllFromCloud();
+            updateFamilyMembersPreview();
+            trackFamilyMemberJoined();
+
+            alert(`You're on ${row.out_child_name}'s care team! 💙\n\nYou joined as ${circleRoleLabel(row.out_circle_role)} with ${permissionLabel(row.out_permission)}.`);
+            return true;
+        }
+
+        // With email confirmation on, signUp returns no session, so the invite
+        // rides on user_metadata and is redeemed at first sign-in — the person
+        // may well confirm on a different device.
+        async function redeemPendingInviteFromMetadata(authUser) {
+            const code = (authUser.user_metadata || {}).pending_invite_code;
+            if (!code) return;
+
+            const { data, error } = await sb.rpc('redeem_child_invite', {
+                p_code: code,
+                p_full_name: (authUser.user_metadata || {}).full_name || null
+            });
+
+            // Clear it either way: a code that failed once will fail the same way
+            // on every future sign-in, and re-alerting each time would be worse
+            // than saying nothing.
+            try {
+                await sb.auth.updateUser({ data: { pending_invite_code: null } });
+            } catch (err) {
+                console.warn('[SickleStrong] could not clear pending invite', err);
+            }
+
+            if (error || !data || data.length === 0) {
+                console.warn('[SickleStrong] pending invite redemption failed', error);
+                const message = inviteErrorMessage(error);
+                if (message) setTimeout(() => alert(message), 400);
+                return;
+            }
+
+            const row = data[0];
+            familyAuth.familyCode = row.out_family_code;
+            setTimeout(() => alert(
+                `You're on ${row.out_child_name}'s care team! 💙\n\nYou joined as ${circleRoleLabel(row.out_circle_role)} with ${permissionLabel(row.out_permission)}.`
+            ), 400);
+        }
+
+        function showInviteSignupModal(code) {
+            const modal = document.createElement('div');
+            modal.className = 'modal active';
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width:420px;">
+                    <button class="modal-close" onclick="this.closest('.modal').remove()">×</button>
+                    <div class="modal-title">💙 You've been invited</div>
+                    <p style="font-size:13px;color:var(--text-light);line-height:1.6;margin-bottom:16px;">
+                        Create an account to join this child's care team. What you can see and do
+                        was set by the person who invited you.
+                    </p>
+                    <div class="input-group">
+                        <label class="input-label">Your Name</label>
+                        <input type="text" class="input-field" id="inviteName" placeholder="Full name" autocomplete="name" />
+                    </div>
+                    <div class="input-group">
+                        <label class="input-label">Email Address</label>
+                        <input type="email" class="input-field" id="inviteEmail" placeholder="your@email.com" autocomplete="email" />
+                    </div>
+                    <div class="input-group">
+                        <label class="input-label">Create a Password</label>
+                        <input type="password" class="input-field" id="invitePassword" placeholder="Min. 8 characters" autocomplete="new-password" />
+                    </div>
+                    <div id="inviteSignupError" style="display:none;font-size:13px;color:var(--emergency);margin-bottom:10px;"></div>
+                    <button class="btn btn-primary btn-full" id="inviteSignupSubmit">Accept invite 💙</button>
+                    <button class="btn btn-secondary btn-full" style="margin-top:8px;" id="inviteSignIn">I already have an account</button>
+                </div>
+            `;
+            document.body.appendChild(modal);
+
+            modal.querySelector('#inviteSignupSubmit')
+                .addEventListener('click', () => submitInviteSignup(code, modal));
+            modal.querySelector('#invitePassword').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') submitInviteSignup(code, modal);
+            });
+            modal.querySelector('#inviteSignIn').addEventListener('click', () => {
+                _pendingInviteAfterLogin = code;
+                modal.remove();
+                document.getElementById('authScreen').classList.add('active');
+                switchAuthTab('login');
+                showToast("Sign in and we'll connect you to the invite.");
+            });
+            setTimeout(() => modal.querySelector('#inviteName')?.focus(), 50);
+        }
+
+        // Set when someone with an existing account opens an invite link, so
+        // handleLogin can finish the redemption straight after they sign in.
+        let _pendingInviteAfterLogin = null;
+
+        async function submitInviteSignup(code, modal) {
+            const name = modal.querySelector('#inviteName').value.trim();
+            const email = modal.querySelector('#inviteEmail').value.trim();
+            const password = modal.querySelector('#invitePassword').value;
+            const errorEl = modal.querySelector('#inviteSignupError');
+            const button = modal.querySelector('#inviteSignupSubmit');
+
+            const showError = (msg) => {
+                errorEl.textContent = msg;
+                errorEl.style.display = 'block';
+                button.disabled = false;
+                button.textContent = 'Accept invite 💙';
+            };
+
+            if (!name) return showError('Please enter your name.');
+            if (!/^\S+@\S+\.\S+$/.test(email)) return showError('Please enter a valid email address.');
+            if (password.length < 8) return showError('Password must be at least 8 characters.');
+
+            button.disabled = true;
+            button.textContent = 'Joining…';
+            errorEl.style.display = 'none';
+
+            const { data, error } = await sb.auth.signUp({
+                email, password,
+                options: { data: { full_name: name, role: 'caregiver', pending_invite_code: code } }
+            });
+            if (error) return showError(error.message);
+
+            if (!data.session) {
+                modal.remove();
+                closeAuthScreen();
+                alert(`Almost there, ${name}! 💙\n\nWe sent a confirmation link to ${email}.\n\nOpen it to confirm your account, then sign in — we'll connect you to the care team automatically.`);
+                return;
+            }
+
+            const ok = await redeemInviteNow(code, name);
+            if (ok) modal.remove();
+            else showError("We couldn't open that invite. It may have expired or already been used.");
+        }
+
         async function submitJoin(target, modal) {
             const name = modal.querySelector('#joinName').value.trim();
             const email = modal.querySelector('#joinEmail').value.trim();
@@ -7730,6 +8251,10 @@
             return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
         }
 
+        // Kept in a module-level handle so invite/remove actions can re-render
+        // the sharing screen after they change something.
+        let _familyModal = null;
+
         async function showFamilyMembers() {
             const modal = document.createElement('div');
             modal.className = 'modal active';
@@ -7741,17 +8266,31 @@
                 </div>
             `;
             document.body.appendChild(modal);
+            _familyModal = modal;
 
             await loadFamilyMembers();
+            _inactiveChildren = await loadInactiveChildren();
             if (!modal.isConnected) return; // closed while loading
             renderFamilyMembersModal(modal);
         }
 
+        let _inactiveChildren = [];
+
+        // Re-reads the circles and repaints, after an invite, removal or
+        // deactivation changes what the screen should show.
+        async function refreshFamilyModal() {
+            if (!_familyModal || !_familyModal.isConnected) return;
+            await loadFamilyMembers();
+            _inactiveChildren = await loadInactiveChildren();
+            if (!_familyModal.isConnected) return;
+            renderFamilyMembersModal(_familyModal);
+            updateFamilyMembersPreview();
+        }
+
         function renderFamilyMembersModal(modal) {
             const auth = familyAuth.currentUser;
-            const members = familyAuth.familyMembers || [];
             const familyCode = familyAuth.familyCode;
-            const children = appData.children || [];
+            const circles = familyAuth.childCircles || [];
 
             const signedOutBlock = `
                 <div style="background:var(--bg);border-radius:14px;padding:14px;margin-bottom:16px;text-align:center;">
@@ -7759,48 +8298,91 @@
                     <button class="btn btn-primary" style="margin-top:10px;" onclick="this.closest('.modal').remove();document.getElementById('authScreen').classList.add('active');">Create Account</button>
                 </div>`;
 
-            // The invite code that actually grants access is per child. This is
-            // deliberate: sharing one child with that child's other parent must
-            // never hand over a sibling's records too.
-            const childShareBlock = children.length > 0 ? `
-                <div class="report-section-title">Invite someone to a child</div>
-                <div style="font-size:12px;color:var(--text-light);line-height:1.6;margin-bottom:10px;">
-                    Each child has their own invite code. Someone who joins with it sees
-                    <strong>only that child</strong> — never their siblings.
-                </div>
-                ${children.map(child => {
-                    const code = child.shareCode;
-                    return `
-                    <div style="background:var(--bg);border-radius:14px;padding:12px 14px;margin-bottom:10px;">
-                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-                            <span style="font-size:18px;">${escapeHtml(child.emoji || '👧🏾')}</span>
-                            <span style="font-size:14px;font-weight:700;">${escapeHtml(child.name)}</span>
+            // One card per child. Access is granted per child, so the circle —
+            // who's on it, what they can do, who can manage it — belongs to the
+            // child, not to the household.
+            const circlesBlock = circles.length > 0 ? circles.map(circle => {
+                const pending = circle.pendingInvites || [];
+                return `
+                <div class="circle-card">
+                    <div class="circle-head">
+                        <span style="font-size:18px;">${escapeHtml(circle.emoji)}</span>
+                        <span>${escapeHtml(circle.childName)}</span>
+                        <span style="margin-left:auto;font-size:11px;font-weight:600;color:var(--text-light);">
+                            ${circle.members.length}/5
+                        </span>
+                    </div>
+
+                    ${circle.members.map(m => {
+                        const joined = formatJoinedDate(m.joinedAt);
+                        const canRemoveOther = circle.isParent && !m.isYou;
+                        const actionLabel = m.isYou ? 'Leave' : (canRemoveOther ? 'Remove' : '');
+                        return `
+                        <div class="circle-person">
+                            <div class="member-avatar">${escapeHtml(memberInitial(m))}</div>
+                            <div class="circle-person-info">
+                                <div class="circle-person-name">${escapeHtml(m.name)}${m.isYou ? ' (you)' : ''}</div>
+                                <div class="circle-person-meta">
+                                    ${escapeHtml(circleRoleLabel(m.circleRole))} · ${escapeHtml(permissionLabel(m.permission))}${joined ? ` · Joined ${joined}` : ''}
+                                </div>
+                            </div>
+                            ${actionLabel ? `
+                            <button class="circle-action danger"
+                                    data-remove-child="${escapeHtml(circle.childId)}"
+                                    data-remove-auth="${escapeHtml(m.authId)}"
+                                    data-remove-name="${escapeHtml(m.name)}"
+                                    data-remove-self="${m.isYou ? '1' : '0'}">${actionLabel}</button>` : ''}
+                        </div>`;
+                    }).join('')}
+
+                    ${circle.isParent && pending.length > 0 ? `
+                    <div style="margin-top:10px;font-size:11px;font-weight:700;color:var(--text-light);
+                                text-transform:uppercase;letter-spacing:.05em;">Pending invites</div>
+                    ${pending.map(inv => `
+                        <div class="invite-pending">
+                            <div class="circle-person-info">
+                                <div class="circle-person-name" style="font-family:'Sora',sans-serif;letter-spacing:.05em;">${escapeHtml(inv.code)}</div>
+                                <div class="circle-person-meta">
+                                    ${escapeHtml(circleRoleLabel(inv.circle_role))} · ${escapeHtml(permissionLabel(inv.permission))} · Expires ${escapeHtml(formatExpiry(inv.expires_at))}
+                                </div>
+                            </div>
+                            <button class="circle-action" data-resend-code="${escapeHtml(inv.code)}"
+                                    data-resend-child="${escapeHtml(circle.childName)}">Send</button>
+                            <button class="circle-action danger" data-cancel-invite="${escapeHtml(inv.id)}">Cancel</button>
                         </div>
-                        ${code ? `
-                        <div style="font-size:20px;font-weight:800;font-family:'Sora',sans-serif;
-                                    letter-spacing:.12em;color:var(--text);margin-bottom:8px;">${escapeHtml(code)}</div>
-                        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                            <button data-share-code="${escapeHtml(code)}" data-child-name="${escapeHtml(child.name)}"
-                                style="background:var(--primary);color:white;border:none;border-radius:10px;
-                                       padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Sora',sans-serif;">
-                                Share invite
-                            </button>
-                            <button data-copy-code="${escapeHtml(code)}"
-                                style="background:var(--card-bg);color:var(--text-mid);border:1px solid var(--border);
-                                       border-radius:10px;padding:7px 14px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Sora',sans-serif;">
-                                Copy code
-                            </button>
-                            <button data-rotate-child="${escapeHtml(child.id)}"
-                                style="background:none;color:var(--text-light);border:none;
-                                       padding:7px 6px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Sora',sans-serif;">
-                                New code
-                            </button>
-                        </div>` : `
-                        <div style="font-size:12px;color:var(--text-light);">
-                            This child hasn't synced to the cloud yet — sign in and reopen to get an invite code.
-                        </div>`}
-                    </div>`;
-                }).join('')}` : '';
+                    `).join('')}` : ''}
+
+                    ${circle.isParent ? `
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;">
+                        <button class="btn btn-primary" style="flex:1;min-width:150px;padding:9px;font-size:13px;"
+                                data-invite-child="${escapeHtml(circle.childId)}">Invite someone</button>
+                    </div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+                        <button class="circle-action" data-deactivate-child="${escapeHtml(circle.childId)}">Remove ${escapeHtml(circle.childName)}</button>
+                        <button class="circle-action danger" data-delete-child="${escapeHtml(circle.childId)}">Delete permanently</button>
+                    </div>` : `
+                    <div style="margin-top:10px;font-size:11px;color:var(--text-light);line-height:1.5;">
+                        A co-parent manages who has access to ${escapeHtml(circle.childName)}.
+                    </div>`}
+                </div>`;
+            }).join('') : `
+                <div style="font-size:13px;color:var(--text-light);text-align:center;padding:16px;">
+                    No children synced yet. Once a child is saved to the cloud you can invite people to their care team.
+                </div>`;
+
+            const inactiveBlock = (_inactiveChildren && _inactiveChildren.length > 0) ? `
+                <div class="report-section-title">Removed children</div>
+                <div style="font-size:12px;color:var(--text-light);line-height:1.6;margin-bottom:8px;">
+                    Hidden from the app. Nothing has been deleted.
+                </div>
+                ${_inactiveChildren.map(c => `
+                    <div class="circle-person" style="border-top:none;">
+                        <div class="circle-person-info">
+                            <div class="circle-person-name">${escapeHtml(c.emoji || '👧🏾')} ${escapeHtml(c.name)}</div>
+                        </div>
+                        <button class="circle-action" data-reactivate-child="${escapeHtml(c.id)}">Restore</button>
+                    </div>
+                `).join('')}` : '';
 
             const familyCodeBlock = familyCode ? `
                 <div class="report-section-title">Your household code</div>
@@ -7809,7 +8391,7 @@
                     <div style="font-size:22px;font-weight:800;font-family:'Sora',sans-serif;color:var(--text);letter-spacing:.1em;">${escapeHtml(familyCode)}</div>
                     <div style="font-size:11px;color:var(--text-light);margin-top:6px;line-height:1.5;">
                         Joins someone to your household only. It does <strong>not</strong> give
-                        access to any child's records — use a child's invite code for that.
+                        access to any child's records — send a child invite for that.
                     </div>
                     <button data-copy-code="${escapeHtml(familyCode)}"
                         style="margin-top:8px;background:var(--primary);color:white;border:none;border-radius:10px;
@@ -7818,37 +8400,17 @@
                     </button>
                 </div>` : '';
 
-            const membersBlock = members.length > 0 ? `
-                <div class="report-section-title">People with access (${members.length})</div>
-                ${members.map(m => {
-                    const joined = formatJoinedDate(m.joinedAt);
-                    const seeing = (m.childNames && m.childNames.length)
-                        ? `Can see ${escapeHtml(m.childNames.join(', '))}`
-                        : 'No children shared yet';
-                    return `
-                    <div class="member-item">
-                        <div class="member-avatar">${escapeHtml(memberInitial(m))}</div>
-                        <div class="member-info">
-                            <div class="member-name">${escapeHtml(m.name)}${m.isPrimary ? ' ⭐' : ''}${m.isYou ? ' (you)' : ''}</div>
-                            <div class="member-role">${seeing}${joined ? ` · Joined ${joined}` : ''}</div>
-                        </div>
-                        <span class="permission-badge ${m.permissions === 'admin' ? 'perm-admin' : m.permissions === 'full' ? 'perm-full' : 'perm-view'}">
-                            ${m.permissions === 'admin' ? 'Admin' : m.permissions === 'full' ? 'Full Access' : 'View Only'}
-                        </span>
-                    </div>`;
-                }).join('')}` : `
-                <div style="font-size:13px;color:var(--text-light);text-align:center;padding:16px;">
-                    No one else has access yet. Share a child's invite code above to add someone.
-                </div>`;
-
             modal.innerHTML = `
                 <div class="modal-content" style="max-width:460px;">
                     <button class="modal-close" onclick="this.closest('.modal').remove()">×</button>
                     <div class="modal-title">👨‍👩‍👧‍👦 Family &amp; Sharing</div>
                     ${auth ? '' : signedOutBlock}
-                    ${auth ? childShareBlock : ''}
+                    ${auth ? `<div style="font-size:12px;color:var(--text-light);line-height:1.6;margin-bottom:12px;">
+                        Access is per child — someone you invite sees only the child you invite them to.
+                    </div>` : ''}
+                    ${auth ? circlesBlock : ''}
+                    ${auth ? inactiveBlock : ''}
                     ${auth ? familyCodeBlock : ''}
-                    ${auth ? membersBlock : ''}
                     <button class="btn btn-secondary btn-full" style="margin-top:16px;" onclick="this.closest('.modal').remove();document.getElementById('authScreen').classList.add('active');">
                         ${auth ? 'Switch Account' : 'Sign In / Create Account'}
                     </button>
@@ -7860,36 +8422,218 @@
             modal.querySelectorAll('[data-copy-code]').forEach(btn => {
                 btn.addEventListener('click', () => copyTextToClipboard(btn.dataset.copyCode));
             });
-            modal.querySelectorAll('[data-share-code]').forEach(btn => {
-                btn.addEventListener('click', () => shareInviteCode(btn.dataset.shareCode, btn.dataset.childName));
+            modal.querySelectorAll('[data-invite-child]').forEach(btn => {
+                btn.addEventListener('click', () => showInviteComposer(btn.dataset.inviteChild));
             });
-            modal.querySelectorAll('[data-rotate-child]').forEach(btn => {
-                btn.addEventListener('click', () => rotateChildShareCode(btn.dataset.rotateChild, modal));
+            modal.querySelectorAll('[data-resend-code]').forEach(btn => {
+                btn.addEventListener('click', () => shareInviteCode(btn.dataset.resendCode, btn.dataset.resendChild));
+            });
+            modal.querySelectorAll('[data-cancel-invite]').forEach(btn => {
+                btn.addEventListener('click', () => cancelInvite(btn.dataset.cancelInvite));
+            });
+            modal.querySelectorAll('[data-remove-child]').forEach(btn => {
+                btn.addEventListener('click', () => removeFromCircle(
+                    btn.dataset.removeChild, btn.dataset.removeAuth,
+                    btn.dataset.removeName, btn.dataset.removeSelf === '1'));
+            });
+            modal.querySelectorAll('[data-deactivate-child]').forEach(btn => {
+                btn.addEventListener('click', () => deactivateChild(btn.dataset.deactivateChild));
+            });
+            modal.querySelectorAll('[data-delete-child]').forEach(btn => {
+                btn.addEventListener('click', () => confirmDeleteChild(btn.dataset.deleteChild));
+            });
+            modal.querySelectorAll('[data-reactivate-child]').forEach(btn => {
+                btn.addEventListener('click', () => reactivateChild(btn.dataset.reactivateChild));
             });
         }
 
-        // Lets a parent revoke an invite that's been passed around. Existing
-        // caregivers keep their access; only the code itself changes.
-        async function rotateChildShareCode(childId, modal) {
-            const child = appData.children.find(c => c.id === childId);
-            if (!child) return;
-            if (!confirm(`Generate a new invite code for ${child.name}?\n\nThe old code stops working. Anyone already added keeps their access.`)) return;
+        function formatExpiry(value) {
+            const d = new Date(value);
+            if (isNaN(d.getTime())) return 'soon';
+            return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        }
 
-            if (cloudIsOffline()) {
-                alert('You appear to be offline. Reconnect and try again.');
+        // Revoking, not deleting: the row stays so a redemption attempt can say
+        // "this was cancelled" rather than "we don't recognise that link".
+        async function cancelInvite(inviteId) {
+            if (!confirm('Cancel this invite?\n\nThe link stops working straight away. You can always create a new one.')) return;
+            if (cloudIsOffline()) { showToast('You appear to be offline. Reconnect and try again.', 'warning'); return; }
+
+            const { error } = await sb.from('child_invites')
+                .update({ revoked_at: new Date().toISOString() }).eq('id', inviteId);
+            if (error) {
+                console.warn('[SickleStrong] invite cancel failed', error);
+                showToast("We couldn't cancel that invite just now. Please try again.", 'warning');
+                return;
+            }
+            showToast('Invite cancelled.');
+            await refreshFamilyModal();
+        }
+
+        // A caregiver removing someone else matches zero rows rather than
+        // erroring, so success is confirmed by re-reading rather than by the
+        // absence of an error.
+        async function removeFromCircle(childId, authId, name, isSelf) {
+            const circle = (familyAuth.childCircles || []).find(c => c.childId === childId);
+            const childName = circle ? circle.childName : 'this child';
+
+            const message = isSelf
+                ? `Leave ${childName}'s care team?\n\nYou'll lose access to their records. Someone with access can invite you back.`
+                : `Remove ${name} from ${childName}'s care team?\n\nThey'll lose access to ${childName}'s records straight away.`;
+            if (!confirm(message)) return;
+            if (cloudIsOffline()) { showToast('You appear to be offline. Reconnect and try again.', 'warning'); return; }
+
+            const { error } = await sb.from('child_access')
+                .delete().eq('child_id', childId).eq('auth_id', authId);
+
+            if (error) {
+                const raw = error.message || '';
+                if (raw.includes('LAST_PARENT_CANNOT_BE_REMOVED')) {
+                    alert(`${childName} needs at least one co-parent.\n\nInvite another co-parent first, then you can leave.`);
+                    return;
+                }
+                console.warn('[SickleStrong] remove from circle failed', error);
+                showToast("We couldn't make that change just now. Please try again.", 'warning');
                 return;
             }
 
-            const { data, error } = await sb.rpc('rotate_child_share_code', { p_child_id: childId });
-            if (error || !data) {
-                alert('We couldn\'t generate a new code just now. Please try again in a moment.');
-                console.warn('[SickleStrong] rotate share code failed', error);
+            // Confirm it actually went — RLS silently matches zero rows when the
+            // signed-in user isn't allowed to remove that person.
+            const { data: still } = await sb.from('child_access')
+                .select('auth_id').eq('child_id', childId).eq('auth_id', authId);
+            if (still && still.length > 0) {
+                alert(`Only a co-parent can remove someone from ${childName}'s care team.`);
                 return;
             }
-            child.shareCode = data;
+
+            if (isSelf) {
+                // Their own access is gone; drop the child locally too.
+                appData.children = appData.children.filter(c => c.id !== childId);
+                if (appData.currentChildId === childId) {
+                    appData.currentChildId = appData.children[0]?.id || null;
+                }
+                saveData();
+                updateUI();
+                showToast(`You've left ${childName}'s care team.`);
+            } else {
+                showToast(`${name} no longer has access to ${childName}.`);
+            }
+            await refreshFamilyModal();
+        }
+
+        // Reversible hide. "Remove" in the UI, because that's what it means to a
+        // parent — nothing is actually destroyed.
+        async function deactivateChild(childId) {
+            const circle = (familyAuth.childCircles || []).find(c => c.childId === childId);
+            if (!circle || !circle.isParent) return;
+            if (!confirm(`Remove ${circle.childName} from the app?\n\nTheir records are kept and you can restore them at any time from this screen.`)) return;
+            if (cloudIsOffline()) { showToast('You appear to be offline. Reconnect and try again.', 'warning'); return; }
+
+            const { error } = await sb.rpc('set_child_active_status', { p_child_id: childId, p_active: false });
+            if (error) {
+                if ((error.message || '').includes('NOT_A_PARENT_FOR_THIS_CHILD')) {
+                    alert(`Only a co-parent can remove ${circle.childName}.`);
+                    return;
+                }
+                console.warn('[SickleStrong] deactivate child failed', error);
+                showToast("We couldn't remove that profile just now. Please try again.", 'warning');
+                return;
+            }
+
+            appData.children = appData.children.filter(c => c.id !== childId);
+            if (appData.currentChildId === childId) {
+                appData.currentChildId = appData.children[0]?.id || null;
+            }
             saveData();
-            renderFamilyMembersModal(modal);
-            alert(`New invite code for ${child.name}: ${data}`);
+            updateUI();
+            showToast(`${circle.childName} removed. You can restore them from Family & Sharing.`);
+            await refreshFamilyModal();
+        }
+
+        async function reactivateChild(childId) {
+            if (cloudIsOffline()) { showToast('You appear to be offline. Reconnect and try again.', 'warning'); return; }
+            const { error } = await sb.rpc('set_child_active_status', { p_child_id: childId, p_active: true });
+            if (error) {
+                if ((error.message || '').includes('NOT_A_PARENT_FOR_THIS_CHILD')) {
+                    alert('Only a co-parent can restore this profile.');
+                    return;
+                }
+                console.warn('[SickleStrong] reactivate child failed', error);
+                showToast("We couldn't restore that profile just now. Please try again.", 'warning');
+                return;
+            }
+            await syncAllFromCloud();
+            showToast('Profile restored.');
+            await refreshFamilyModal();
+        }
+
+        // No undo on this one, so it asks for the child's name rather than a
+        // yes/no anyone can tap through by reflex.
+        function confirmDeleteChild(childId) {
+            const circle = (familyAuth.childCircles || []).find(c => c.childId === childId);
+            if (!circle || !circle.isParent) return;
+
+            const modal = document.createElement('div');
+            modal.className = 'modal active';
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width:420px;">
+                    <button class="modal-close" onclick="this.closest('.modal').remove()">×</button>
+                    <div class="modal-title">⚠️ Delete ${escapeHtml(circle.childName)} permanently</div>
+                    <p style="font-size:13px;color:var(--text-light);line-height:1.6;margin-bottom:14px;">
+                        This erases every record for ${escapeHtml(circle.childName)} — pain episodes,
+                        medications, temperatures, notes, everyone's access. <strong>It cannot be undone.</strong>
+                    </p>
+                    <p style="font-size:13px;line-height:1.6;margin-bottom:8px;">
+                        If you only want them hidden, close this and choose
+                        “Remove ${escapeHtml(circle.childName)}” instead — that keeps everything and can be undone.
+                    </p>
+                    <div class="input-group">
+                        <label class="input-label">Type <strong>${escapeHtml(circle.childName)}</strong> to confirm</label>
+                        <input type="text" class="input-field" id="deleteConfirmName" autocomplete="off" />
+                    </div>
+                    <div id="deleteError" style="display:none;font-size:13px;color:var(--emergency);margin-bottom:10px;"></div>
+                    <button class="btn btn-full" id="deleteConfirmBtn"
+                        style="background:var(--emergency);color:#fff;">Delete permanently</button>
+                </div>
+            `;
+            document.body.appendChild(modal);
+
+            modal.querySelector('#deleteConfirmBtn').addEventListener('click', async () => {
+                const typed = modal.querySelector('#deleteConfirmName').value.trim();
+                const errorEl = modal.querySelector('#deleteError');
+                if (typed.toLowerCase() !== circle.childName.trim().toLowerCase()) {
+                    errorEl.textContent = `Please type "${circle.childName}" exactly to confirm.`;
+                    errorEl.style.display = 'block';
+                    return;
+                }
+                if (cloudIsOffline()) {
+                    errorEl.textContent = 'You appear to be offline. Reconnect and try again.';
+                    errorEl.style.display = 'block';
+                    return;
+                }
+
+                const { error } = await sb.rpc('delete_child_permanently', { p_child_id: childId });
+                if (error) {
+                    if ((error.message || '').includes('NOT_A_PARENT_FOR_THIS_CHILD')) {
+                        errorEl.textContent = 'Only a co-parent can delete this profile.';
+                    } else {
+                        console.warn('[SickleStrong] delete child failed', error);
+                        errorEl.textContent = "We couldn't delete that profile just now. Please try again.";
+                    }
+                    errorEl.style.display = 'block';
+                    return;
+                }
+
+                appData.children = appData.children.filter(c => c.id !== childId);
+                if (appData.currentChildId === childId) {
+                    appData.currentChildId = appData.children[0]?.id || null;
+                }
+                saveData();
+                updateUI();
+                modal.remove();
+                showToast(`${circle.childName} was permanently deleted.`);
+                await refreshFamilyModal();
+            });
         }
 
         function updateFamilyMembersPreview() {
@@ -8307,6 +9051,11 @@
             const quoteEl = document.getElementById('dailyQuote');
             if (quoteEl) quoteEl.textContent = getDailyQuote();
 
+            // An invite link (?invite=INV-XXXXXXXX) is the main way people are
+            // added to a child, so it's read before anything else decides what
+            // to show — it changes whether we open the wizard or a join prompt.
+            const pendingInvite = readInviteFromUrl();
+
             // Cloud work is best-effort: a network failure here must never stop
             // the wizard or the main app from rendering below.
             try {
@@ -8314,6 +9063,10 @@
                 if (session) {
                     familyAuth.isLoggedIn = true;
                     localStorage.setItem('ss_auth_dismissed', 'true');
+                    // An invite carried through email confirmation redeems before
+                    // provisioning, so the invitee lands in the child's household
+                    // rather than a new one of their own.
+                    await redeemPendingInviteFromMetadata(session.user);
                     // Clicking the confirmation link can land here with a live
                     // session without ever passing through handleLogin, so this
                     // path has to provision too. No-op once set up.
@@ -8366,6 +9119,11 @@
                     dropdown.classList.remove('active');
                 }
             });
+
+            // Last, so it opens over a fully rendered app rather than racing it.
+            if (pendingInvite) {
+                await handleInviteLink(pendingInvite);
+            }
         });
     </script>
 </body>
