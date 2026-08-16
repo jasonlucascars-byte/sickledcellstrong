@@ -8432,26 +8432,22 @@
 
         // Revoking, not deleting: the row stays so a redemption attempt can say
         // "this was cancelled" rather than "we don't recognise that link".
+        //
+        // Goes through a SECURITY DEFINER RPC rather than a direct update.
+        // child_invites is visible only to parents, so the update-then-re-read
+        // pattern used for child_access can't work here: a non-parent's re-read
+        // comes back empty whether the invite was cancelled or simply invisible
+        // to them, which read as success. The function sees the row regardless
+        // of the caller's visibility, checks authorization itself, and returns a
+        // real error.
         async function cancelInvite(inviteId) {
             if (!confirm('Cancel this invite?\n\nThe link stops working straight away. You can always create a new one.')) return;
             if (cloudIsOffline()) { showToast('You appear to be offline. Reconnect and try again.', 'warning'); return; }
 
-            const { error } = await sb.from('child_invites')
-                .update({ revoked_at: new Date().toISOString() }).eq('id', inviteId);
+            const { error } = await sb.rpc('cancel_child_invite', { p_invite_id: inviteId });
             if (error) {
                 console.warn('[SickleStrong] invite cancel failed', error);
                 showToast("We couldn't cancel that invite just now. Please try again.", 'warning');
-                return;
-            }
-
-            // Same RLS quirk removeFromCircle guards against: an update the
-            // signed-in user isn't allowed to make matches zero rows and comes
-            // back with no error, so success has to be confirmed by re-reading
-            // rather than by the absence of an error.
-            const { data: still } = await sb.from('child_invites')
-                .select('id').eq('id', inviteId).is('revoked_at', null);
-            if (still && still.length > 0) {
-                showToast("That invite couldn't be cancelled.", 'warning');
                 return;
             }
 
