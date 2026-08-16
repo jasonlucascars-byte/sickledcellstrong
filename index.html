@@ -1781,19 +1781,19 @@
                     <button class="btn btn-primary btn-full" style="margin-top:8px;" onclick="handleLogin()">
                         Sign In 💙
                     </button>
-                    <div class="auth-divider">or join with an invite code</div>
+                    <div class="auth-divider">or join a household</div>
                     <div class="input-group">
-                        <label class="input-label">Invite Code</label>
+                        <label class="input-label">Household Code</label>
                         <input type="text" class="input-field family-code-input" id="familyCodeInput"
-                               placeholder="C-A1B2C3" maxlength="12"
+                               placeholder="STRONG-1234" maxlength="12"
                                autocapitalize="characters" autocorrect="off" spellcheck="false" />
                         <p style="font-size:11px;color:var(--text-light);margin-top:6px;line-height:1.5;">
-                            A child's invite code (C-A1B2C3) connects you to that child's records.
-                            A household code (STRONG-1234) joins the family only.
+                            Joins the household only. To see a child's health records you need an
+                            invite link for that child — open the link they sent you instead.
                         </p>
                     </div>
                     <button class="btn btn-secondary btn-full" onclick="joinWithFamilyCode()">
-                        Join With Code
+                        Join Household
                     </button>
                 </div>
 
@@ -3947,14 +3947,13 @@
                     const saved = await _pushChild(child, familyId);
                     if (saved) {
                         child.id = saved.id; // use DB UUID
-                        child.shareCode = saved.share_code || null; // invite code for this child
                         appData.currentChildId = saved.id;
                         saveData();
                     } else {
-                        // Local-only child: it tracks fine, but it has no share
-                        // code, so per-child inviting won't work until it syncs.
-                        // Silence here left people with a Family & Sharing screen
-                        // that just didn't offer a code, with no explanation.
+                        // Local-only child: it tracks fine, but it isn't in the
+                        // cloud, so no one can be invited to it yet. Silence here
+                        // left people with a Family & Sharing screen that just
+                        // didn't offer the child, with no explanation.
                         showToast(`${child.name}'s profile is saved on this device, but didn't reach the cloud. Sharing will be available once it syncs.`, 'warning');
                     }
                     await _pushMeds(child.medications, child.id, familyId);
@@ -6974,7 +6973,6 @@
                         emoji: c.emoji || '👧🏾',
                         color: c.color || childColors[idx % childColors.length],
                         photo: c.photo_url,
-                        shareCode: c.share_code || null,
                         selfTracking: c.self_tracking,
                         hydrationGoal: c.hydration_goal || 48,
                         daysPainFree: c.days_pain_free || 0,
@@ -7753,11 +7751,17 @@
         // Safe to call on every login; it no-ops once a users row exists.
         async function ensureUserProvisioned(authUser) {
             const meta = authUser.user_metadata || {};
+            // p_child_code is deliberately not sent any more. The database now
+            // rejects any child code with LEGACY_CHILD_CODE_DISABLED, so passing
+            // a stale pending_child_code — left on anyone who signed up with the
+            // old flow and hasn't confirmed their email yet — would fail their
+            // provisioning and lock them out of signing in at all. Ignoring it
+            // provisions them into their own household instead; they can then be
+            // invited to a child with a link.
             const { data, error } = await sb.rpc('provision_current_user', {
                 p_full_name: meta.full_name || null,
                 p_role: meta.role || 'parent',
-                p_join_code: meta.pending_family_code || null,
-                p_child_code: meta.pending_child_code || null
+                p_join_code: meta.pending_family_code || null
             });
             if (error || !data || data.length === 0) {
                 console.warn('[SickleStrong] provisioning failed', error);
@@ -7770,7 +7774,7 @@
                     family_id: row.out_family_id,
                     full_name: row.out_full_name,
                     role: meta.role || 'parent',
-                    is_primary: !meta.pending_family_code && !meta.pending_child_code
+                    is_primary: !meta.pending_family_code
                 },
                 familyCode: row.out_family_code,
                 created: row.out_created,
@@ -7854,16 +7858,18 @@
             alert(`Account created! 💙\n\nYour Family Code: ${familyCode}\n\nTo let someone see a child's health records, open Family Members and share that child's invite code — they'll only ever see the child you invite them to.`);
         }
 
-        // ── JOINING ──────────────────────────────────────────────────────
-        // Two kinds of code can be typed into the join box:
-        //   C-XXXXXX     a child invite code — grants access to that one child
-        //   WORD-1234    a family code — joins the household only
-        // Access to a child's records comes exclusively from a child_access
-        // row, which only the child code creates. The family code deliberately
-        // grants no health data: a parent sharing one child with that child's
-        // other parent must not hand over their other children too.
+        // ── JOINING A HOUSEHOLD ──────────────────────────────────────────
+        // This field only ever takes a household code (WORD-1234), which joins
+        // the family and grants no access to any child's records.
+        //
+        // The old per-child C-XXXXXX code is retired: it granted 'full' access
+        // unconditionally, with no expiry and no way to say whether the person
+        // was a co-parent or a caregiver. Child access now comes solely from a
+        // one-time invite link (?invite=INV-XXXXXXXX), which carries the
+        // permission and role the inviting parent chose. The database no longer
+        // issues share codes or accepts them, so recognising the shape here
+        // would only promise something that can't work for anyone.
         function classifyJoinCode(code) {
-            if (/^C-[A-Z0-9]{6}$/.test(code)) return 'child';
             if (/^[A-Z]+-\d{4}$/.test(code)) return 'family';
             return null;
         }
@@ -7872,9 +7878,8 @@
             const input = document.getElementById('familyCodeInput');
             const code = normalizeJoinCode(input ? input.value : '');
 
-            const kind = classifyJoinCode(code);
-            if (!kind) {
-                alert('Please enter an invite code.\n\nA child invite code looks like C-A1B2C3.\nA family code looks like STRONG-1234.');
+            if (!classifyJoinCode(code)) {
+                alert('Please enter a household code.\n\nHousehold codes look like STRONG-1234.\n\nIf someone sent you a link to join a child\'s care team, open that link instead — it doesn\'t get typed in here.');
                 return;
             }
 
@@ -7883,48 +7888,25 @@
                 return;
             }
 
-            let target;
-            if (kind === 'child') {
-                // children_select requires child_access, so an invitee can never
-                // resolve this with a plain select. Same DEFINER-lookup reason
-                // as lookup_family_by_code.
-                const { data, error } = await sb.rpc('lookup_child_by_code', { p_code: code });
-                if (error) {
-                    alert('We couldn\'t check that code just now. Please try again in a moment.');
-                    console.warn('[SickleStrong] child code lookup failed', error);
-                    return;
-                }
-                if (!data || data.length === 0) {
-                    alert('That invite code wasn\'t found.\n\nDouble-check it with the person who sent it — codes look like C-A1B2C3.');
-                    return;
-                }
-                target = { kind, code, childName: data[0].out_child_name };
-            } else {
-                const { data, error } = await sb.rpc('lookup_family_by_code', { p_code: code });
-                if (error) {
-                    alert('We couldn\'t check that code just now. Please try again in a moment.');
-                    console.warn('[SickleStrong] family code lookup failed', error);
-                    return;
-                }
-                if (!data || data.length === 0) {
-                    alert('That family code wasn\'t found.\n\nDouble-check it with the person who sent it — codes look like STRONG-1234.');
-                    return;
-                }
-                target = { kind, code: data[0].out_family_code };
+            const { data, error } = await sb.rpc('lookup_family_by_code', { p_code: code });
+            if (error) {
+                alert('We couldn\'t check that code just now. Please try again in a moment.');
+                console.warn('[SickleStrong] family code lookup failed', error);
+                return;
+            }
+            if (!data || data.length === 0) {
+                alert('That household code wasn\'t found.\n\nDouble-check it with the person who sent it — codes look like STRONG-1234.');
+                return;
             }
 
-            showJoinDetailsModal(target);
+            showJoinDetailsModal({ kind: 'family', code: data[0].out_family_code });
         }
 
         // Replaces three chained prompt() dialogs, which validated nothing and
         // vanished without explanation if any one of them was cancelled.
         function showJoinDetailsModal(target) {
-            const heading = target.kind === 'child'
-                ? `Join ${escapeHtml(target.childName)}'s care team`
-                : 'Join a family account';
-            const blurb = target.kind === 'child'
-                ? `You'll be able to see and add to <strong>${escapeHtml(target.childName)}</strong>'s health records. You won't see any other children.`
-                : `You'll join this household. To see a child's health records, ask for that child's invite code as well.`;
+            const heading = 'Join a family account';
+            const blurb = `You'll join this household. To see a child's health records, ask for an invite link to that child.`;
 
             const modal = document.createElement('div');
             modal.className = 'modal active';
@@ -8176,9 +8158,7 @@
             // The join intent rides on the auth user: with email confirmation
             // on, signUp returns session: null, and the person may well confirm
             // on a different device, where localStorage wouldn't follow them.
-            const metadata = { full_name: name, role: 'caregiver' };
-            if (target.kind === 'child') metadata.pending_child_code = target.code;
-            else metadata.pending_family_code = target.code;
+            const metadata = { full_name: name, role: 'caregiver', pending_family_code: target.code };
 
             const { data, error } = await sb.auth.signUp({ email, password, options: { data: metadata } });
             if (error) return showError(error.message);
@@ -8186,10 +8166,7 @@
             if (!data.session) {
                 modal.remove();
                 closeAuthScreen();
-                const what = target.kind === 'child'
-                    ? `you'll be connected to ${target.childName}'s records automatically`
-                    : `you'll be connected to the family automatically`;
-                alert(`Almost there, ${name}! 💙\n\nWe sent a confirmation link to ${email}.\n\nOpen it to confirm your account, then sign in — ${what}.`);
+                alert(`Almost there, ${name}! 💙\n\nWe sent a confirmation link to ${email}.\n\nOpen it to confirm your account, then sign in — you'll be connected to the family automatically.`);
                 return;
             }
 
@@ -8466,6 +8443,18 @@
                 showToast("We couldn't cancel that invite just now. Please try again.", 'warning');
                 return;
             }
+
+            // Same RLS quirk removeFromCircle guards against: an update the
+            // signed-in user isn't allowed to make matches zero rows and comes
+            // back with no error, so success has to be confirmed by re-reading
+            // rather than by the absence of an error.
+            const { data: still } = await sb.from('child_invites')
+                .select('id').eq('id', inviteId).is('revoked_at', null);
+            if (still && still.length > 0) {
+                showToast("That invite couldn't be cancelled.", 'warning');
+                return;
+            }
+
             showToast('Invite cancelled.');
             await refreshFamilyModal();
         }
