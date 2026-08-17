@@ -1008,6 +1008,21 @@
             color: var(--emergency);
             margin: 2px;
         }
+        /* Write controls the current permission tier doesn't allow. !important
+           so it beats the inline display many of these buttons carry. */
+        .perm-hidden { display: none !important; }
+
+        .permission-banner {
+            background: var(--warning-light);
+            color: #7a4a00;
+            border-radius: 14px;
+            padding: 11px 14px;
+            font-size: 12px;
+            line-height: 1.55;
+            font-weight: 600;
+            margin-bottom: 14px;
+        }
+
         .invite-choice {
             display: flex;
             align-items: flex-start;
@@ -1347,6 +1362,10 @@
         <div class="content">
             <!-- Home Section -->
             <section id="home" class="section active">
+                <!-- Explains why write controls are absent, rather than leaving
+                     a caregiver hunting for a button that was never rendered.
+                     Filled in and shown/hidden by applyPermissionGating(). -->
+                <div id="permissionBanner" class="permission-banner perm-hidden"></div>
                 <div class="quick-stats">
                     <div class="stat-card">
                         <div class="stat-value" id="todayMeds">0</div>
@@ -1431,7 +1450,7 @@
                             <span style="font-size: 20px;">🌡️</span>
                             <span>Family Temperature Check</span>
                         </div>
-                        <button class="btn btn-primary btn-small" onclick="showQuickLogAllTemps()">+ Log All</button>
+                        <button class="btn btn-primary btn-small" data-requires="report" onclick="showQuickLogAllTemps()">+ Log All</button>
                     </div>
                     <div id="tempOverviewList"></div>
                 </div>
@@ -1439,7 +1458,7 @@
                 <div class="card">
                     <div class="card-header">
                         <div class="card-title">💊 Today's Medications</div>
-                        <button class="btn btn-secondary btn-small" onclick="showAddMedication()">+ Add</button>
+                        <button class="btn btn-secondary btn-small" data-requires="full" onclick="showAddMedication()">+ Add</button>
                     </div>
                     <div id="medicationList"></div>
                 </div>
@@ -1465,10 +1484,10 @@
                 <div class="card">
                     <div class="card-header">
                         <div class="card-title">🩺 Track Symptoms</div>
-                        <button class="btn btn-primary btn-small" onclick="showLogSymptoms()">+ Log</button>
+                        <button class="btn btn-primary btn-small" data-requires="full" onclick="showLogSymptoms()">+ Log</button>
                     </div>
                     <div style="display:grid;gap:10px;margin-top:14px;">
-                        <button class="btn btn-primary btn-full" onclick="showPainBodyMap()"
+                        <button class="btn btn-primary btn-full" data-requires="report" onclick="showPainBodyMap()"
                                 style="display:flex;align-items:center;justify-content:center;gap:10px;
                                        padding:14px;border-radius:14px;">
                             <span style="font-size:22px;">🫁</span>
@@ -1477,7 +1496,7 @@
                                 <div style="font-size:11px;opacity:0.8;">Body map · severity · what helped</div>
                             </div>
                         </button>
-                        <button class="btn btn-secondary btn-full" onclick="showLogTemperature()"
+                        <button class="btn btn-secondary btn-full" data-requires="report" onclick="showLogTemperature()"
                                 style="display:flex;align-items:center;justify-content:center;gap:10px;
                                        padding:14px;border-radius:14px;">
                             <span style="font-size:22px;">🌡️</span>
@@ -1486,7 +1505,7 @@
                                 <div style="font-size:11px;color:var(--text-light);">Auto-alerts at 101.3°F</div>
                             </div>
                         </button>
-                        <button class="btn btn-secondary btn-full" onclick="showLogSymptoms()"
+                        <button class="btn btn-secondary btn-full" data-requires="full" onclick="showLogSymptoms()"
                                 style="display:flex;align-items:center;justify-content:center;gap:10px;
                                        padding:14px;border-radius:14px;">
                             <span style="font-size:22px;">📸</span>
@@ -1505,7 +1524,7 @@
                 <div class="hydration-goal">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
                         <h3 style="margin: 0; color: var(--text);">💧 Daily Hydration Goal</h3>
-                        <button class="btn btn-secondary btn-small" onclick="showCustomizeHydrationGoal()" style="font-size: 11px; padding: 6px 12px;">⚙️ Customize</button>
+                        <button class="btn btn-secondary btn-small" data-requires="full" onclick="showCustomizeHydrationGoal()" style="font-size: 11px; padding: 6px 12px;">⚙️ Customize</button>
                     </div>
                     <div id="hydrationGoalMode" style="font-size: 11px; color: var(--text-light); margin-bottom: 12px;"></div>
                     <div class="hydration-progress">
@@ -1520,9 +1539,9 @@
                         <span id="currentOz">0</span> oz of <span id="goalOz">32</span> oz
                     </div>
                     <div class="hydration-buttons">
-                        <button class="hydration-btn" onclick="addWater(4)">+ 4 oz</button>
-                        <button class="hydration-btn" onclick="addWater(8)">+ 8 oz</button>
-                        <button class="hydration-btn" onclick="addWater(12)">+ 12 oz</button>
+                        <button class="hydration-btn" data-requires="full" onclick="addWater(4)">+ 4 oz</button>
+                        <button class="hydration-btn" data-requires="full" onclick="addWater(8)">+ 8 oz</button>
+                        <button class="hydration-btn" data-requires="full" onclick="addWater(12)">+ 12 oz</button>
                         <button class="hydration-btn" onclick="resetWater()">Reset</button>
                     </div>
                 </div>
@@ -1530,7 +1549,7 @@
                 <div class="card">
                     <div class="card-header">
                         <div class="card-title">📊 Weight Tracking</div>
-                        <button class="btn btn-primary btn-small" onclick="showLogWeight()">+ Log</button>
+                        <button class="btn btn-primary btn-small" data-requires="full" onclick="showLogWeight()">+ Log</button>
                     </div>
                     <div id="weightList"></div>
                 </div>
@@ -1538,7 +1557,7 @@
                 <div class="card" id="strokeScreenCard" style="display:none;">
                     <div class="card-header">
                         <div class="card-title">🧠 Annual Stroke Screen (TCD)</div>
-                        <button class="btn btn-primary btn-small" onclick="showLogStrokeScreen()">+ Log</button>
+                        <button class="btn btn-primary btn-small" data-requires="full" onclick="showLogStrokeScreen()">+ Log</button>
                     </div>
                     <div id="strokeScreenContent"></div>
                 </div>
@@ -1581,7 +1600,7 @@
                 <div class="card">
                     <div class="card-header">
                         <div class="card-title">📞 Emergency Contacts</div>
-                        <button class="btn btn-secondary btn-small" onclick="showAddContact()">+ Add</button>
+                        <button class="btn btn-secondary btn-small" data-requires="full" onclick="showAddContact()">+ Add</button>
                     </div>
                     <div id="contactList"></div>
                 </div>
@@ -1619,7 +1638,7 @@
                 <div class="card">
                     <div class="card-header">
                         <div class="card-title">📖 Journal & Notes</div>
-                        <button class="btn btn-primary btn-small" onclick="showAddNote()">+ Add Note</button>
+                        <button class="btn btn-primary btn-small" data-requires="full" onclick="showAddNote()">+ Add Note</button>
                     </div>
                     <div id="notesList"></div>
                 </div>
@@ -2592,6 +2611,7 @@
         }
         
         function showAddNote() {
+            if (!requirePermission('full')) return;
             const modal = document.createElement('div');
             modal.className = 'modal active';
             modal.innerHTML = `
@@ -2629,6 +2649,7 @@
         }
         
         function saveNote() {
+            if (!requirePermission('full')) return;
             const text = document.getElementById('noteText').value.trim();
             if (!text) {
                 alert('Please write something in your note');
@@ -2684,6 +2705,7 @@
         window.selectedPainLocations = []; // Track multiple selections
         
         function showPainBodyMap() {
+            if (!requirePermission('report')) return;
             const child = getCurrentChild();
             window.painBodyView = 'front';
             window.selectedPainLocations = [];
@@ -3096,6 +3118,7 @@
         }
         
         function savePainEntry() {
+            if (!requirePermission('report')) return;
             const child = getCurrentChild();
             const helped = [];
             if (document.getElementById('helped_medication').checked) helped.push('Medication');
@@ -3144,6 +3167,7 @@
         }
         
         function showLogTemperature() {
+            if (!requirePermission('report')) return;
             const child = getCurrentChild();
             const modal = document.createElement('div');
             modal.className = 'modal active';
@@ -3184,6 +3208,7 @@
         }
         
         function saveTemperature() {
+            if (!requirePermission('report')) return;
             const child = getCurrentChild();
             const temperature = window.tempHasFever ? parseFloat(document.getElementById('tempValue').value) : 98.6;
             
@@ -3215,6 +3240,7 @@
         }
         
         function showQuickLogAllTemps() {
+            if (!requirePermission('report')) return;
             const modal = document.createElement('div');
             modal.className = 'modal active';
             
@@ -3256,6 +3282,7 @@
         }
         
         function saveAllTemperatures() {
+            if (!requirePermission('report')) return;
             const inputs = document.querySelectorAll('.quick-temp-input');
             let hasEmergency = false;
             let emergencyChild = null;
@@ -3424,6 +3451,7 @@
         }
         
         function showLogSymptoms() {
+            if (!requirePermission('full')) return;
             const child = getCurrentChild();
             if (!child) return;
 
@@ -3663,6 +3691,7 @@
         }
 
         function saveSymptomLog() {
+            if (!requirePermission('full')) return;
             const child = getCurrentChild();
             if (!child) return;
 
@@ -4533,6 +4562,11 @@
             renderSymptomHistory();
             renderStrokeScreenCard();
             updateNotificationUI();
+
+            // Last, so it also catches the write controls the renders above
+            // just created. Re-runs on every updateUI(), which is what makes
+            // switching to a child you hold a different tier on take effect.
+            applyPermissionGating();
         }
 
         function renderMedications() {
@@ -4600,7 +4634,7 @@
                                     ? `<div style="font-size:11px;color:var(--primary);margin-top:3px;font-weight:600;">👨‍⚕️ Dr. ${med.doctor}</div>`
                                     : ''}
                             </div>
-                            <button onclick="editMedication(${med.id})"
+                            <button data-requires="full" onclick="editMedication(${med.id})"
                                     style="background:white;border:1.5px solid var(--border);border-radius:10px;
                                            padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;
                                            color:var(--text-mid);font-family:'Sora',sans-serif;
@@ -4693,6 +4727,7 @@
         }
 
         function addWater(oz) {
+            if (!requirePermission('full')) return;
             const child = getCurrentChild();
             child.waterIntake = Math.min(child.waterIntake + oz, child.hydrationGoal);
             saveData();
@@ -4714,6 +4749,7 @@
         }
         
         function showCustomizeHydrationGoal() {
+            if (!requirePermission('full')) return;
             const child = getCurrentChild();
             const currentGoal = child.hydrationGoal;
             const isCustom = child.customHydrationGoal ? true : false;
@@ -4785,6 +4821,7 @@
         }
         
         function saveCustomHydrationGoal() {
+            if (!requirePermission('full')) return;
             const child = getCurrentChild();
             const goalType = document.querySelector('input[name="goalType"]:checked').value;
             
@@ -5015,7 +5052,7 @@
                                     ${contact.notes ? `<div style="font-size:11px;color:var(--text-mid);font-style:italic;margin-top:2px;">${contact.notes}</div>` : ''}
                                 </div>
                             </div>
-                            <button onclick="showAddContact(${contact.id})"
+                            <button data-requires="full" onclick="showAddContact(${contact.id})"
                                     style="background:white;border:1.5px solid var(--border);border-radius:10px;
                                            padding:5px 10px;font-size:11px;font-weight:600;cursor:pointer;
                                            color:var(--text-mid);font-family:'Sora',sans-serif;flex-shrink:0;margin-left:8px;">
@@ -5153,6 +5190,7 @@
 
         // Placeholder functions for features to implement
         function showAddMedication() {
+            if (!requirePermission('full', "Your access doesn't allow changing medications.")) return;
             const child = getCurrentChild();
             if (!child) return;
 
@@ -5335,6 +5373,7 @@
         }
 
         function saveNewMedication() {
+            if (!requirePermission('full', "Your access doesn't allow changing medications.")) return;
             const child = getCurrentChild();
             if (!child) return;
 
@@ -5415,6 +5454,7 @@
             setTimeout(() => alert(`✅ Added: ${names}`), 100);
         }
         function showLogWeight() {
+            if (!requirePermission('full')) return;
             const child = getCurrentChild();
             if (!child) return;
 
@@ -5578,7 +5618,7 @@
                                             <span style="font-weight:800;font-size:15px;font-family:'Sora',sans-serif;">
                                                 ${entry.weight} lbs
                                             </span>
-                                            <button onclick="deleteWeightEntry('${entry.timestamp}')"
+                                            <button data-requires="full" onclick="deleteWeightEntry('${entry.timestamp}')"
                                                     style="background:none;border:none;color:var(--text-light);
                                                            cursor:pointer;font-size:14px;padding:2px 6px;
                                                            border-radius:6px;transition:all 0.2s;"
@@ -5653,6 +5693,7 @@
         }
 
         function deleteWeightEntry(timestamp) {
+            if (!requirePermission('full')) return;
             const child = getCurrentChild();
             if (!child.weightHistory) return;
             if (!confirm('Remove this weight entry?')) return;
@@ -5666,6 +5707,7 @@
         }
 
         function saveWeight() {
+            if (!requirePermission('full')) return;
             const child = getCurrentChild();
             const unit = document.getElementById('weightUnit').value;
             const rawVal = parseFloat(document.getElementById('newWeight').value);
@@ -5789,6 +5831,7 @@
         }
 
         function showLogStrokeScreen() {
+            if (!requirePermission('full')) return;
             const child = getCurrentChild();
             if (!child) return;
 
@@ -5820,6 +5863,7 @@
         }
 
         function saveStrokeScreen() {
+            if (!requirePermission('full')) return;
             const date = document.getElementById('strokeScreenDate').value;
             const result = document.getElementById('strokeScreenResult').value;
             if (!date) { alert('Please enter the screen date.'); return; }
@@ -5840,6 +5884,7 @@
         }
 
         function showAddContact(editId = null) {
+            if (!requirePermission('full')) return;
             const existing = editId ? appData.contacts.find(c => c.id === editId) : null;
 
             const modal = document.createElement('div');
@@ -5958,6 +6003,7 @@
         }
 
         function saveNewContact(editId = null) {
+            if (!requirePermission('full')) return;
             const typeRadio = document.querySelector('input[name="contactType"]:checked');
             const name = document.getElementById('contactName').value.trim();
             const phone = document.getElementById('contactPhone').value.trim();
@@ -6008,6 +6054,7 @@
         }
 
         function deleteContact(id) {
+            if (!requirePermission('full')) return;
             const contact = appData.contacts.find(c => c.id === id);
             if (!contact) return;
             if (!confirm(`Remove ${contact.name} from emergency contacts?`)) return;
@@ -6890,9 +6937,30 @@
             return _cachedFamilyId;
         }
 
+        // A write rejected by RLS is worth telling someone about: the local save
+        // already went through (this app is local-first), so this is the only
+        // place they'd ever learn the cloud copy didn't. A backstop for anything
+        // the UI gating missed or for stale cached permissions — not a
+        // substitute for the gating itself.
+        function reportCloudWriteError(err) {
+            console.warn('[SickleStrong cloud sync]', err);
+            const raw = (err && err.message) || '';
+            if ((err && err.code === '42501') || raw.includes('row-level security')) {
+                showToast("Saved on this device, but your access here doesn't allow this to be saved for others to see.", 'warning');
+            }
+        }
+
         function cloudSync(fn) {
-            // Fire-and-forget async cloud write — never blocks the UI
-            fn().catch(err => console.warn('[SickleStrong cloud sync]', err));
+            // Fire-and-forget async cloud write — never blocks the UI.
+            // supabase-js resolves with { error } rather than throwing for a
+            // rejected write, so the resolved value has to be inspected too;
+            // .catch() alone would never see a permission denial.
+            Promise.resolve()
+                .then(fn)
+                .then(result => {
+                    if (result && result.error) reportCloudWriteError(result.error);
+                })
+                .catch(reportCloudWriteError);
         }
 
         // ── SUPABASE LOAD (on login / session restore) ────────────────────
@@ -7058,8 +7126,12 @@
             }
 
             saveData();
-            updateUI();
+            // Circles are loaded before the first render, not after: updateUI()
+            // runs the permission gating, and with no circle data that fails
+            // open — which would flash write controls a view-only caregiver
+            // shouldn't be offered at all.
             await loadFamilyMembers();
+            updateUI();
             updateFamilyMembersPreview();
         }
 
@@ -7221,7 +7293,9 @@
                 ? await sb.from('children').upsert(payload, { onConflict: 'id' })
                 : await sb.from('children').insert(payload);
             if (writeError) {
-                console.warn('[SickleStrong] child write failed', writeError);
+                // Goes through the shared reporter so a permission denial on a
+                // child-profile write is surfaced the same way as any other.
+                reportCloudWriteError(writeError);
                 return null;
             }
 
@@ -7243,7 +7317,7 @@
 
         async function _pushMeds(medications, childId, familyId) {
             if (!medications || medications.length === 0) return;
-            await sb.from('medications').insert(
+            return sb.from('medications').insert(
                 medications.map(m => ({
                     child_id: childId,
                     family_id: familyId,
@@ -7264,7 +7338,7 @@
         async function _pushPainLog(entry, childId, familyId) {
             // pain_logs.severity is CHECK 1-5 in DB
             const severity = Math.min(5, Math.max(1, Math.round(entry.level)));
-            await sb.from('pain_logs').insert({
+            return sb.from('pain_logs').insert({
                 child_id: childId,
                 family_id: familyId,
                 severity,
@@ -7276,7 +7350,7 @@
         }
 
         async function _pushTempLog(entry, childId, familyId) {
-            await sb.from('temperature_logs').insert({
+            return sb.from('temperature_logs').insert({
                 child_id: childId,
                 family_id: familyId,
                 temperature_f: entry.temperature,
@@ -7286,7 +7360,7 @@
         }
 
         async function _pushNote(note, childId, familyId) {
-            await sb.from('notes').insert({
+            return sb.from('notes').insert({
                 child_id: childId,
                 family_id: familyId,
                 title: note.title || null,
@@ -7298,7 +7372,7 @@
 
         async function _pushSymptom(entry, childId, familyId) {
             const symptomType = Array.isArray(entry.symptoms) ? entry.symptoms[0] : entry.symptoms;
-            await sb.from('symptoms').insert({
+            return sb.from('symptoms').insert({
                 child_id: childId,
                 family_id: familyId,
                 symptom_type: symptomType || null,
@@ -7310,7 +7384,7 @@
         }
 
         async function _pushWeight(entry, childId, familyId) {
-            await sb.from('weight_logs').insert({
+            return sb.from('weight_logs').insert({
                 child_id: childId,
                 family_id: familyId,
                 weight_lbs: entry.weight,
@@ -7336,11 +7410,11 @@
                 is_primary: contact.isPrimary || false
             };
             if (isUUID) payload.id = contact.id;
-            await sb.from('contacts').upsert(payload, { onConflict: 'id' });
+            return sb.from('contacts').upsert(payload, { onConflict: 'id' });
         }
 
         async function _pushHydration(oz, goalOz, childId, familyId) {
-            await sb.from('hydration_logs').insert({
+            return sb.from('hydration_logs').insert({
                 child_id: childId,
                 family_id: familyId,
                 amount_oz: oz,
@@ -7478,7 +7552,83 @@
         }
 
         function permissionLabel(permission) {
-            return permission === 'full' ? 'Full Access' : 'View Only';
+            if (permission === 'full') return 'Full Access';
+            if (permission === 'report') return 'Can Report Pain & Fever';
+            return 'View Only';
+        }
+
+        // ── PERMISSION TIERS ─────────────────────────────────────────────
+        // view   — read everything, write nothing
+        // report — read everything, plus append new pain and temperature
+        //          entries. Cannot edit or delete anything, including its own
+        //          entries, and cannot touch medications or the child profile.
+        // full   — everything
+        //
+        // The database enforces all of this through RLS; the gating below
+        // exists so the UI doesn't offer actions that would silently fail.
+        const PERMISSION_RANK = { view: 0, report: 1, full: 2 };
+
+        function currentChildPermission(childId) {
+            const circle = (familyAuth.childCircles || []).find(c => c.childId === childId);
+            // No circle data means either local-only use (nothing to restrict)
+            // or data that hasn't loaded yet. Fail open here on purpose: RLS is
+            // the real boundary and already enforces this correctly regardless
+            // of what the UI decides to show. This layer exists so the UI
+            // doesn't lie about what will happen, not to provide the security.
+            if (!circle) return 'full';
+            return circle.myPermission || 'view';
+        }
+
+        function childAllows(childId, needed) {
+            const held = PERMISSION_RANK[currentChildPermission(childId)] ?? 2;
+            return held >= (PERMISSION_RANK[needed] ?? 2);
+        }
+
+        // For the child currently on screen.
+        function canDo(needed) {
+            return childAllows(appData.currentChildId, needed);
+        }
+
+        // Guards the function bodies as well as the buttons. Hiding a control
+        // isn't enough on its own — a stale rendering, a queued handler or the
+        // console can still reach these.
+        function requirePermission(needed, message) {
+            if (canDo(needed)) return true;
+            const child = getCurrentChild();
+            const who = child ? child.name : 'this child';
+            showToast(message || (needed === 'full'
+                ? `Your access to ${who} is view-only for this.`
+                : `Your access to ${who} doesn't allow that.`), 'warning');
+            return false;
+        }
+
+        // Shows or hides every control marked with data-requires. Runs from
+        // updateUI(), so it re-evaluates whenever the active child changes —
+        // someone can hold a different tier on each child.
+        function applyPermissionGating() {
+            const permission = currentChildPermission(appData.currentChildId);
+            const held = PERMISSION_RANK[permission] ?? 2;
+
+            document.querySelectorAll('[data-requires]').forEach(el => {
+                const needed = PERMISSION_RANK[el.dataset.requires] ?? 2;
+                // A class rather than style.display, so controls that carry an
+                // inline display (flex, grid) keep it when shown again.
+                el.classList.toggle('perm-hidden', held < needed);
+            });
+
+            const banner = document.getElementById('permissionBanner');
+            if (banner) {
+                if (permission === 'full') {
+                    banner.classList.add('perm-hidden');
+                } else {
+                    const child = getCurrentChild();
+                    const name = child ? escapeHtml(child.name) : 'this child';
+                    banner.classList.remove('perm-hidden');
+                    banner.innerHTML = permission === 'report'
+                        ? `👀 You can view ${name}'s records and add new pain and temperature entries. You can't edit or delete entries, or change medications.`
+                        : `👀 You have view-only access to ${name}'s records.`;
+                }
+            }
         }
 
         function circleRoleLabel(role) {
@@ -7512,6 +7662,10 @@
                         <label class="invite-choice" data-value="full">
                             <input type="radio" name="invitePerm" value="full" checked />
                             <span><strong>Full Access</strong><br><span class="invite-choice-sub">Can view records and log care</span></span>
+                        </label>
+                        <label class="invite-choice" data-value="report">
+                            <input type="radio" name="invitePerm" value="report" />
+                            <span><strong>Can Report Pain &amp; Fever</strong><br><span class="invite-choice-sub">Can add new pain and temperature entries. Can't edit or delete anything, and can't see or change medications.</span></span>
                         </label>
                         <label class="invite-choice" data-value="view">
                             <input type="radio" name="invitePerm" value="view" />
@@ -8745,6 +8899,7 @@
             renderWizard();
         }
         function editMedication(id) {
+            if (!requirePermission('full', "Your access doesn't allow changing medications.")) return;
             const child = getCurrentChild();
             const med = child.medications.find(m => m.id === id);
             if (!med) return;
@@ -8857,6 +9012,7 @@
         }
 
         function saveEditedMedication(id) {
+            if (!requirePermission('full', "Your access doesn't allow changing medications.")) return;
             const child = getCurrentChild();
             const med = child.medications.find(m => m.id === id);
             if (!med) return;
@@ -8884,6 +9040,7 @@
         }
         
         function deleteMedication(id) {
+            if (!requirePermission('full', "Your access doesn't allow changing medications.")) return;
             if (!confirm('Delete this medication?')) return;
             
             const child = getCurrentChild();
