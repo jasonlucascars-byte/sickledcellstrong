@@ -3874,7 +3874,7 @@
 
                 } else if (entry.type === 'temp') {
                     const t = entry.data;
-                    const isFever = parseFloat(t.temp) >= 101.3;
+                    const isFever = parseFloat(t.temperature) >= 101.3;
                     html += `
                         <div style="background:${isFever ? 'var(--emergency-light)' : 'var(--bg)'};
                                     padding:14px;border-radius:16px;margin-bottom:10px;
@@ -3882,7 +3882,7 @@
                             <div style="display:flex;justify-content:space-between;align-items:center;">
                                 <div style="display:flex;align-items:center;gap:8px;">
                                     <span style="font-weight:800;font-size:14px;font-family:'Sora',sans-serif;">
-                                        🌡️ ${parseFloat(t.temp).toFixed(1)}°F
+                                        🌡️ ${parseFloat(t.temperature).toFixed(1)}°F
                                     </span>
                                     ${isFever ? `<span style="font-size:11px;background:var(--emergency);color:white;
                                                               padding:2px 8px;border-radius:20px;font-weight:700;">⚠️ FEVER</span>` : ''}
@@ -6362,15 +6362,19 @@
             cutoff.setDate(cutoff.getDate() - 90);
 
             // Filter data to last 90 days
-            const painLogs = (child.painLog || []).filter(l => new Date(l.date) >= cutoff);
-            const tempLogs = (child.temperatureLog || []).filter(l => new Date(l.date) >= cutoff);
+            // Pain entries are keyed by startTime and temperatures by timestamp;
+            // neither has a `date` field. Reading one made every comparison
+            // Invalid Date >= cutoff, i.e. false, so the report silently showed
+            // nothing no matter how much had been logged.
+            const painLogs = (child.painLog || []).filter(l => new Date(l.startTime) >= cutoff);
+            const tempLogs = (child.temperatureLog || []).filter(l => new Date(l.timestamp) >= cutoff);
             const meds = appData.medications ? appData.medications.filter(m => m.childId === child.id) : (child.medications || []);
 
             // Calculate stats
-            const fevers = tempLogs.filter(t => parseFloat(t.temp) >= 101.3);
-            const emergencyTemps = tempLogs.filter(t => parseFloat(t.temp) >= 104);
+            const fevers = tempLogs.filter(t => parseFloat(t.temperature) >= 101.3);
+            const emergencyTemps = tempLogs.filter(t => parseFloat(t.temperature) >= 104);
             const avgSeverity = painLogs.length > 0
-                ? (painLogs.reduce((a, b) => a + (b.severity || 0), 0) / painLogs.length).toFixed(1)
+                ? (painLogs.reduce((a, b) => a + (b.level || 0), 0) / painLogs.length).toFixed(1)
                 : 'None';
             const criticalMeds = meds.filter(m => m.critical || m.isCritical);
             const contacts = appData.contacts || [];
@@ -6438,18 +6442,18 @@
                             </div>
                             <div class="report-row">
                                 <span class="report-label">Highest Severity</span>
-                                <span class="report-value ${parseInt(avgSeverity) >= 4 ? 'report-fever' : ''}">${Math.max(...painLogs.map(l => l.severity || 0))} / 5</span>
+                                <span class="report-value ${parseInt(avgSeverity) >= 4 ? 'report-fever' : ''}">${Math.max(...painLogs.map(l => l.level || 0))} / 5</span>
                             </div>
                             <div style="margin-top:10px;">
                                 ${painLogs.slice(0,8).map(log => `
                                     <div style="background:var(--bg);border-radius:10px;padding:10px 12px;margin-bottom:6px;">
                                         <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
-                                            <span style="font-size:12px;font-weight:700;font-family:'Sora',sans-serif;">${new Date(log.date).toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span>
-                                            <span style="font-size:12px;font-weight:700;color:${log.severity >= 4 ? 'var(--emergency)' : log.severity >= 3 ? 'var(--warning)' : 'var(--success)'};">Severity ${log.severity}/5</span>
+                                            <span style="font-size:12px;font-weight:700;font-family:'Sora',sans-serif;">${new Date(log.startTime).toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span>
+                                            <span style="font-size:12px;font-weight:700;color:${log.level >= 4 ? 'var(--emergency)' : log.level >= 3 ? 'var(--warning)' : 'var(--success)'};">Severity ${log.level}/5</span>
                                         </div>
-                                        ${log.locations && log.locations.length > 0
-                                            ? `<div style="margin-bottom:4px;">${log.locations.map(loc => `<span class="pain-chip">${loc}</span>`).join('')}</div>` : ''}
-                                        ${log.whatHelped ? `<div style="font-size:11px;color:var(--text-light);">Helped: ${log.whatHelped}</div>` : ''}
+                                        ${(log.location || '').split(', ').filter(Boolean).length > 0
+                                            ? `<div style="margin-bottom:4px;">${(log.location || '').split(', ').filter(Boolean).map(loc => `<span class="pain-chip">${loc}</span>`).join('')}</div>` : ''}
+                                        ${log.helped && log.helped.length > 0 ? `<div style="font-size:11px;color:var(--text-light);">Helped: ${log.helped.join(', ')}</div>` : ''}
                                     </div>
                                 `).join('')}
                                 ${painLogs.length > 8 ? `<div style="font-size:12px;color:var(--text-light);text-align:center;padding:4px;">+ ${painLogs.length - 8} more episodes in full export</div>` : ''}
@@ -6476,15 +6480,15 @@
                             </div>` : ''}
                             <div class="report-row">
                                 <span class="report-label">Highest Temp</span>
-                                <span class="report-value ${Math.max(...tempLogs.map(t => parseFloat(t.temp)||0)) >= 101.3 ? 'report-fever' : ''}">${Math.max(...tempLogs.map(t => parseFloat(t.temp)||0)).toFixed(1)}°F</span>
+                                <span class="report-value ${Math.max(...tempLogs.map(t => parseFloat(t.temperature)||0)) >= 101.3 ? 'report-fever' : ''}">${Math.max(...tempLogs.map(t => parseFloat(t.temperature)||0)).toFixed(1)}°F</span>
                             </div>
                             ${fevers.length > 0 ? `
                             <div style="margin-top:10px;">
                                 <div style="font-size:11px;font-weight:700;color:var(--emergency);margin-bottom:6px;text-transform:uppercase;letter-spacing:.05em;">Fever Events</div>
                                 ${fevers.slice(0,5).map(t => `
                                     <div style="background:var(--emergency-light);border-radius:10px;padding:8px 12px;margin-bottom:4px;display:flex;justify-content:space-between;">
-                                        <span style="font-size:12px;font-weight:700;">${new Date(t.date).toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span>
-                                        <span style="font-size:12px;font-weight:700;color:var(--emergency);">${parseFloat(t.temp).toFixed(1)}°F</span>
+                                        <span style="font-size:12px;font-weight:700;">${new Date(t.timestamp).toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span>
+                                        <span style="font-size:12px;font-weight:700;color:var(--emergency);">${parseFloat(t.temperature).toFixed(1)}°F</span>
                                     </div>
                                 `).join('')}
                             </div>` : ''}`
@@ -6551,11 +6555,15 @@
             const cutoff = new Date();
             cutoff.setDate(cutoff.getDate() - 90);
 
-            const painLogs = (child.painLog || []).filter(l => new Date(l.date) >= cutoff);
-            const tempLogs = (child.temperatureLog || []).filter(l => new Date(l.date) >= cutoff);
+            // Pain entries are keyed by startTime and temperatures by timestamp;
+            // neither has a `date` field. Reading one made every comparison
+            // Invalid Date >= cutoff, i.e. false, so the report silently showed
+            // nothing no matter how much had been logged.
+            const painLogs = (child.painLog || []).filter(l => new Date(l.startTime) >= cutoff);
+            const tempLogs = (child.temperatureLog || []).filter(l => new Date(l.timestamp) >= cutoff);
             const meds = child.medications || [];
             const contacts = appData.contacts || [];
-            const fevers = tempLogs.filter(t => parseFloat(t.temp) >= 101.3);
+            const fevers = tempLogs.filter(t => parseFloat(t.temperature) >= 101.3);
 
             // Build clean text report
             const lines = [
@@ -6576,11 +6584,11 @@
                 '── PAIN EPISODES ────────────────────────',
                 `Total Episodes: ${painLogs.length}`,
                 ...(painLogs.length > 0 ? [
-                    `Avg Severity:   ${(painLogs.reduce((a,b)=>a+(b.severity||0),0)/painLogs.length).toFixed(1)} / 5`,
-                    `Highest:        ${Math.max(...painLogs.map(l=>l.severity||0))} / 5`,
+                    `Avg Severity:   ${(painLogs.reduce((a,b)=>a+(b.level||0),0)/painLogs.length).toFixed(1)} / 5`,
+                    `Highest:        ${Math.max(...painLogs.map(l=>l.level||0))} / 5`,
                     '',
                     ...painLogs.map(l =>
-                        `  ${new Date(l.date).toLocaleDateString()} | Severity ${l.severity}/5 | ${(l.locations||[]).join(', ')}${l.whatHelped ? ' | Helped: '+l.whatHelped : ''}`
+                        `  ${new Date(l.startTime).toLocaleDateString()} | Severity ${l.level}/5 | ${l.location || ''}${l.helped && l.helped.length ? ' | Helped: '+l.helped.join(', ') : ''}`
                     )
                 ] : ['No pain episodes in this period.']),
                 '',
@@ -6588,10 +6596,10 @@
                 `Total Readings: ${tempLogs.length}`,
                 `Fevers ≥101.3°F: ${fevers.length}`,
                 ...(tempLogs.length > 0 ? [
-                    `Highest Temp:   ${Math.max(...tempLogs.map(t=>parseFloat(t.temp)||0)).toFixed(1)}°F`,
+                    `Highest Temp:   ${Math.max(...tempLogs.map(t=>parseFloat(t.temperature)||0)).toFixed(1)}°F`,
                     '',
                     ...fevers.map(t =>
-                        `  🚨 FEVER: ${new Date(t.date).toLocaleDateString()} | ${parseFloat(t.temp).toFixed(1)}°F`
+                        `  🚨 FEVER: ${new Date(t.timestamp).toLocaleDateString()} | ${parseFloat(t.temperature).toFixed(1)}°F`
                     )
                 ] : []),
                 '',
