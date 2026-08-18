@@ -300,7 +300,12 @@
 
         .child-selector {
             position: relative;
-            z-index: 9999;
+            /* Sits above the page content and the bottom nav (100) so the
+               child dropdown clears them, but below modals (1000). It was
+               9999, which painted the header — avatar, child name, disease
+               type — on top of every modal in the app and covered whatever
+               sat under it, including the Change button in Settings. */
+            z-index: 150;
             cursor: pointer;
         }
 
