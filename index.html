@@ -549,18 +549,42 @@
 
         /* Buttons */
         .btn {
-            padding: 10px 20px;
+            padding: 12px 20px;
             border: none;
             border-radius: 12px;
             font-weight: 600;
             font-family: 'Sora', sans-serif;
             cursor: pointer;
-            transition: all 0.25s ease;
+            /* Only what actually animates, and fast enough to read as a press
+               rather than a delayed reaction. */
+            transition: transform 100ms ease-out, box-shadow 200ms ease,
+                        background-color 200ms ease, border-color 200ms ease;
             display: inline-flex;
             align-items: center;
+            justify-content: center;
             gap: 6px;
             font-size: 13px;
             letter-spacing: -0.1px;
+            /* 44px is the smallest reliably tappable target; several of these
+               sit under a parent's thumb mid-emergency. */
+            min-height: 44px;
+            line-height: 1.2;
+            text-align: center;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;   /* drops the legacy 300ms tap delay */
+        }
+        /* Feedback belongs on the press, not the release. */
+        .btn:active { transform: scale(0.97); }
+        .btn:focus-visible {
+            outline: 2px solid var(--primary);
+            outline-offset: 2px;
+        }
+        .btn:disabled,
+        .btn[disabled] {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
         }
 
         .btn-primary {
@@ -587,9 +611,11 @@
         }
 
         .btn-small {
-            padding: 6px 14px;
+            padding: 8px 14px;
             font-size: 12px;
             border-radius: 10px;
+            /* Visually compact but still a legitimate touch target. */
+            min-height: 36px;
         }
 
         .btn-danger {
@@ -712,11 +738,50 @@
             padding: 28px;
             max-width: 500px;
             width: 100%;
-            max-height: 90vh;
+            /* dvh tracks the real viewport once mobile browser chrome collapses,
+               so the sheet can't be taller than what's actually on screen. */
+            max-height: min(90vh, 100dvh - 40px);
             overflow-y: auto;
             position: relative;
             box-shadow: 0 20px 60px rgba(0,0,0,0.2);
         }
+
+        /* ── Sheet layout ──────────────────────────────────────────────────
+           For modals built as header + scrolling body + action bar. The body
+           used to carry a fixed max-height (65–70vh) inside a container capped
+           at 90vh; header and footer pushed the total past the cap and, with
+           overflow hidden, the actions were simply clipped off the bottom —
+           unreachable, with nothing to scroll. A flex column gives the body
+           whatever height is left over instead, so the actions are always
+           on screen no matter the content or viewport. */
+        .modal-sheet {
+            padding: 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        .modal-sheet-body {
+            padding: 20px;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            overscroll-behavior: contain;
+            flex: 1 1 auto;
+            min-height: 0;   /* without this a flex child refuses to shrink */
+        }
+        .modal-actions {
+            flex-shrink: 0;
+            display: flex;
+            gap: 10px;
+            padding: 16px 20px;
+            /* Clears the iPhone home indicator without padding everyone else. */
+            padding-bottom: max(16px, env(safe-area-inset-bottom, 16px));
+            background: white;
+            border-top: 1px solid var(--border);
+            /* Soft edge rather than a hard rule, so it reads as content
+               passing under the bar rather than a seam. */
+            box-shadow: 0 -8px 16px -12px rgba(15,15,20,0.35);
+        }
+        .modal-actions .btn { flex: 1; }
 
         .modal-close {
             position: absolute;
@@ -727,13 +792,29 @@
             font-size: 18px;
             cursor: pointer;
             color: var(--text-light);
-            transition: all 0.2s ease;
-            width: 32px;
-            height: 32px;
+            transition: transform 100ms ease-out, background-color 200ms ease;
+            width: 40px;
+            height: 40px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
+            flex-shrink: 0;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+            z-index: 2;   /* stays above a sheet header's own background */
+        }
+        .modal-close:active { transform: scale(0.92); }
+        .modal-close:focus-visible {
+            outline: 2px solid var(--primary);
+            outline-offset: 2px;
+        }
+
+        /* Motion is feedback, not decoration — drop the movement, keep the
+           colour and focus cues that carry the same information. */
+        @media (prefers-reduced-motion: reduce) {
+            .btn, .modal-close, .hydration-btn { transition: none; }
+            .btn:active, .modal-close:active { transform: none; }
         }
 
         .modal-close:hover {
@@ -3478,7 +3559,7 @@
             const modal = document.createElement('div');
             modal.className = 'modal active';
             modal.innerHTML = `
-                <div class="modal-content" style="max-width:480px;padding:0;overflow:hidden;">
+                <div class="modal-content modal-sheet" style="max-width:480px;">
 
                     <!-- Header -->
                     <div style="background:linear-gradient(135deg,#0f0f14,#1e1040);
@@ -3496,7 +3577,7 @@
                                 style="color:white;background:rgba(255,255,255,0.1);">×</button>
                     </div>
 
-                    <div style="padding:20px;max-height:70vh;overflow-y:auto;">
+                    <div class="modal-sheet-body">
 
                         <!-- Emergency warning -->
                         <div style="background:var(--emergency-light);border:1.5px solid var(--emergency);
@@ -3635,8 +3716,7 @@
                     </div>
 
                     <!-- Footer -->
-                    <div style="padding:16px 20px;border-top:1px solid var(--border);
-                                display:flex;gap:10px;background:white;">
+                    <div class="modal-actions">
                         <button class="btn btn-secondary" style="flex:1;"
                                 onclick="this.closest('.modal').remove()">Cancel</button>
                         <button class="btn btn-primary" style="flex:2;"
@@ -5215,7 +5295,7 @@
             const modal = document.createElement('div');
             modal.className = 'modal active';
             modal.innerHTML = `
-                <div class="modal-content" style="max-width:480px;padding:0;overflow:hidden;">
+                <div class="modal-content modal-sheet" style="max-width:480px;">
 
                     <!-- Header -->
                     <div style="background:linear-gradient(135deg,#0f0f14,#1e1040);
@@ -5227,7 +5307,7 @@
                         <button class="modal-close" onclick="this.closest('.modal').remove()" style="color:white;background:rgba(255,255,255,0.1);">×</button>
                     </div>
 
-                    <div style="padding:20px;max-height:70vh;overflow-y:auto;">
+                    <div class="modal-sheet-body">
 
                         <!-- Common medications checkboxes -->
                         <div style="font-size:12px;font-weight:700;color:var(--primary);text-transform:uppercase;
@@ -5354,8 +5434,7 @@
                     </div>
 
                     <!-- Footer Actions -->
-                    <div style="padding:16px 20px;border-top:1px solid var(--border);
-                                display:flex;gap:10px;background:white;">
+                    <div class="modal-actions">
                         <button class="btn btn-secondary" style="flex:1;"
                                 onclick="this.closest('.modal').remove()">Cancel</button>
                         <button class="btn btn-primary" style="flex:2;"
@@ -5488,7 +5567,7 @@
             const modal = document.createElement('div');
             modal.className = 'modal active';
             modal.innerHTML = `
-                <div class="modal-content" style="max-width:460px;padding:0;overflow:hidden;">
+                <div class="modal-content modal-sheet" style="max-width:460px;">
 
                     <!-- Header -->
                     <div style="background:linear-gradient(135deg,#0f0f14,#1e1040);
@@ -5508,7 +5587,7 @@
                                 style="color:white;background:rgba(255,255,255,0.1);">×</button>
                     </div>
 
-                    <div style="padding:20px;max-height:70vh;overflow-y:auto;">
+                    <div class="modal-sheet-body">
 
                         <!-- Weight input — large, prominent -->
                         <div style="text-align:center;margin-bottom:24px;">
@@ -5639,8 +5718,7 @@
                     </div>
 
                     <!-- Footer -->
-                    <div style="padding:16px 20px;border-top:1px solid var(--border);
-                                display:flex;gap:10px;background:white;">
+                    <div class="modal-actions">
                         <button class="btn btn-secondary" style="flex:1;"
                                 onclick="this.closest('.modal').remove()">Cancel</button>
                         <button class="btn btn-primary" style="flex:2;"
@@ -5895,7 +5973,7 @@
             const modal = document.createElement('div');
             modal.className = 'modal active';
             modal.innerHTML = `
-                <div class="modal-content" style="max-width:480px;padding:0;overflow:hidden;">
+                <div class="modal-content modal-sheet" style="max-width:480px;">
 
                     <!-- Header -->
                     <div style="background:linear-gradient(135deg,#0f0f14,#1e1040);
@@ -5910,7 +5988,7 @@
                                 style="color:white;background:rgba(255,255,255,0.1);">×</button>
                     </div>
 
-                    <div style="padding:20px;max-height:70vh;overflow-y:auto;">
+                    <div class="modal-sheet-body">
 
                         <!-- Contact Type — icon grid -->
                         <div style="font-size:12px;font-weight:700;color:var(--primary);text-transform:uppercase;
@@ -5978,8 +6056,7 @@
                     </div>
 
                     <!-- Footer -->
-                    <div style="padding:16px 20px;border-top:1px solid var(--border);
-                                display:flex;gap:10px;background:white;">
+                    <div class="modal-actions">
                         ${existing ? `
                         <button class="btn btn-secondary" style="flex:1;"
                                 onclick="deleteContact(${existing.id})">🗑️ Delete</button>` : `
@@ -6391,7 +6468,7 @@
             const modal = document.createElement('div');
             modal.className = 'modal active';
             modal.innerHTML = `
-                <div class="modal-content" style="max-width:520px;padding:0;overflow:hidden;">
+                <div class="modal-content modal-sheet" style="max-width:520px;">
 
                     <!-- Modal Header -->
                     <div style="background:linear-gradient(135deg,#0f0f14,#1e1040);padding:20px 24px;display:flex;justify-content:space-between;align-items:center;">
@@ -6403,7 +6480,7 @@
                         <button class="modal-close" onclick="this.closest('.modal').remove()" style="color:white;background:rgba(255,255,255,0.1);">×</button>
                     </div>
 
-                    <div style="padding:20px;max-height:65vh;overflow-y:auto;">
+                    <div class="modal-sheet-body">
 
                         <!-- Child Profile -->
                         <div class="report-section-title">Patient Profile</div>
@@ -6538,10 +6615,9 @@
                     </div>
 
                     <!-- Actions -->
-                    <div style="padding:16px 20px;border-top:1px solid var(--border);display:flex;gap:10px;background:white;">
+                    <div class="modal-actions">
                         <button class="btn btn-secondary" style="flex:1;" onclick="printDoctorReport()">🖨️ Print</button>
                         <button class="btn btn-primary" style="flex:1;" onclick="downloadDoctorReport()">📥 Download PDF</button>
-                        <button class="modal-close" onclick="this.closest('.modal').remove()" style="position:static;width:auto;height:auto;background:var(--bg);border:1.5px solid var(--border);border-radius:10px;padding:0 14px;font-size:18px;cursor:pointer;color:var(--text-light);">×</button>
                     </div>
                 </div>
             `;
@@ -6675,7 +6751,7 @@
             const modal = document.createElement('div');
             modal.className = 'modal active';
             modal.innerHTML = `
-                <div class="modal-content" style="max-width:520px;padding:0;overflow:hidden;">
+                <div class="modal-content modal-sheet" style="max-width:520px;">
 
                     <!-- Modal Header -->
                     <div style="background:linear-gradient(135deg,#0f0f14,#1e1040);padding:20px 24px;display:flex;justify-content:space-between;align-items:center;">
@@ -6687,7 +6763,7 @@
                         <button class="modal-close" onclick="this.closest('.modal').remove()" style="color:white;background:rgba(255,255,255,0.1);">×</button>
                     </div>
 
-                    <div style="padding:20px;max-height:65vh;overflow-y:auto;">
+                    <div class="modal-sheet-body">
 
                         <!-- 1. Child Identification -->
                         <div class="report-section-title">Student</div>
@@ -6785,10 +6861,9 @@
                     </div>
 
                     <!-- Actions -->
-                    <div style="padding:16px 20px;border-top:1px solid var(--border);display:flex;gap:10px;background:white;">
+                    <div class="modal-actions">
                         <button class="btn btn-secondary" style="flex:1;" onclick="printSchoolCareSheet()">🖨️ Print</button>
                         <button class="btn btn-primary" style="flex:1;" onclick="downloadSchoolCareSheet()">📥 Download</button>
-                        <button class="modal-close" onclick="this.closest('.modal').remove()" style="position:static;width:auto;height:auto;background:var(--bg);border:1.5px solid var(--border);border-radius:10px;padding:0 14px;font-size:18px;cursor:pointer;color:var(--text-light);">×</button>
                     </div>
                 </div>
             `;
@@ -8922,7 +8997,7 @@
             const modal = document.createElement('div');
             modal.className = 'modal active';
             modal.innerHTML = `
-                <div class="modal-content" style="max-width:480px;padding:0;overflow:hidden;">
+                <div class="modal-content modal-sheet" style="max-width:480px;">
 
                     <div style="background:linear-gradient(135deg,#0f0f14,#1e1040);
                                 padding:20px 24px;display:flex;justify-content:space-between;align-items:center;">
@@ -8936,7 +9011,7 @@
                                 style="color:white;background:rgba(255,255,255,0.1);">×</button>
                     </div>
 
-                    <div style="padding:20px;max-height:65vh;overflow-y:auto;">
+                    <div class="modal-sheet-body">
 
                         <div class="input-group">
                             <label class="input-label">Medication Name</label>
@@ -9012,8 +9087,7 @@
                         </div>
                     </div>
 
-                    <div style="padding:16px 20px;border-top:1px solid var(--border);
-                                display:flex;gap:10px;background:white;">
+                    <div class="modal-actions">
                         <button class="btn btn-secondary" style="flex:1;"
                                 onclick="deleteMedication(${id})">🗑️ Delete</button>
                         <button class="btn btn-primary" style="flex:2;"
@@ -9095,7 +9169,7 @@
             const banner = document.createElement('div');
             banner.id = 'installBanner';
             banner.style.cssText = `
-                position:fixed;bottom:76px;left:12px;right:12px;z-index:2500;
+                position:fixed;bottom:76px;left:12px;right:12px;z-index:900;
                 background:linear-gradient(135deg,#0f0f14,#1e1040);
                 border:1.5px solid var(--primary);border-radius:18px;
                 padding:14px 16px;display:flex;align-items:center;gap:12px;
@@ -9183,7 +9257,7 @@
                     bar = document.createElement('div');
                     bar.id = 'offlineBar';
                     bar.style.cssText = `
-                        position:fixed;top:0;left:0;right:0;z-index:3500;
+                        position:fixed;top:0;left:0;right:0;z-index:960;
                         background:var(--warning);color:#3a2a00;
                         text-align:center;padding:7px;font-size:12px;font-weight:700;
                         font-family:'Sora',sans-serif;`;
