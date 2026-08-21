@@ -6953,6 +6953,19 @@
             setTimeout(() => alert('✅ School care sheet downloaded! Open in any text editor or print directly.'), 100);
         }
 
+        // ── APP URL ───────────────────────────────────────────────────────
+        // Every link we hand to another person must point at production.
+        // These links used to be built from location.origin, which meant a
+        // parent who opened the app from a Netlify preview, a branch deploy or
+        // localhost sent someone a link back to *that* deploy. Child invites
+        // are single-use, so the invite would burn against a build that isn't
+        // the app and the real one would then read as already used.
+        //
+        // If the app ever moves to a custom domain, this is the only line to
+        // change. Confirmed against the Netlify deploy record for project
+        // "sicklestrong-v2", which builds this repo's main branch.
+        const APP_URL = 'https://sicklestrong-v2.netlify.app/';
+
         // ── SUPABASE INIT ─────────────────────────────────────────────────
         const SUPABASE_URL = 'https://zprmzrngdgniexphjgem.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inpwcm16cm5nZGduaWV4cGhqZ2VtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwNTc0MjksImV4cCI6MjA5NjYzMzQyOX0.5mNmKuOtTzyJrdzM6mlRIWqytPe2tUac_AK-cdMGL0A';
@@ -7579,31 +7592,64 @@
 
         // The native share sheet is the path most families actually use — it
         // gets the invite into Messages or WhatsApp without a copy/paste step.
-        async function shareInviteCode(code, childName) {
-            const link = inviteLinkFor(code);
-            const message = childName
-                ? `Join ${childName}'s care team on SickleStrong:\n\n${link}\n\nThe link works for 14 days.`
-                : `Join our family on SickleStrong:\n\n${link}`;
+        // Both share functions run through here so there is one set of
+        // fallbacks rather than two that can drift apart.
+        async function shareViaSheet(title, message, fallbackLabel) {
             if (navigator.share) {
                 try {
-                    await navigator.share({ title: 'SickleStrong invite', text: message });
+                    await navigator.share({ title, text: message });
                     return;
                 } catch (err) {
                     if (err && err.name === 'AbortError') return; // user dismissed
                     console.warn('[SickleStrong] share failed', err);
                 }
             }
-            copyTextToClipboard(message, code);
+            // Awaited, not fired and forgotten: this function is async, and a
+            // caller that awaits it should know the copy has actually happened.
+            return copyTextToClipboard(message, fallbackLabel);
+        }
+
+        // SickleStrong runs in the browser, so the link *is* the app — there's
+        // no store listing and nothing to download first. That's the question
+        // people actually have when a code arrives, so both messages answer it.
+        const NOTHING_TO_INSTALL = 'Opens in your browser, nothing to install.';
+
+        async function shareInviteCode(code, childName) {
+            const link = inviteLinkFor(code);
+            const who = childName ? `${childName}'s care team` : 'our family';
+            const message =
+                `Join ${who} on SickleStrong:\n\n${link}\n\n`
+                + (childName ? `The link works for 14 days.\n\n` : '')
+                + NOTHING_TO_INSTALL;
+            await shareViaSheet('SickleStrong invite', message, code);
+        }
+
+        // The household code grants no access to any child's records, so the
+        // message says so outright. Someone who is sent this and expects to see
+        // a child's logs should find out here, not after making an account.
+        async function shareHouseholdCode(code) {
+            const link = joinLinkFor(code);
+            const message =
+                `Join our family on SickleStrong:\n\n${link}\n\n`
+                + `This adds you to our household. It doesn't include any `
+                + `child's health records — you'll get a separate invite for `
+                + `that.\n\n`
+                + NOTHING_TO_INSTALL;
+            await shareViaSheet('SickleStrong household', message, code);
         }
 
         // A tappable link, so an invite can go out as a text message and the
-        // recipient never has to type a code by hand. Built from the current
-        // origin so it works on preview deploys and localhost too.
+        // recipient never has to type a code by hand. Always built from
+        // APP_URL — see the note there for why location.origin was wrong.
         function inviteLinkFor(code) {
-            const base = (location.origin && location.origin !== 'null')
-                ? location.origin + location.pathname.replace(/index\.html$/, '')
-                : 'https://sicklestrong-v2.netlify.app/';
-            return `${base}?invite=${encodeURIComponent(code)}`;
+            return `${APP_URL}?invite=${encodeURIComponent(code)}`;
+        }
+
+        // The household equivalent. Joins a family and grants no access to any
+        // child's records, which is why the two links are kept visibly
+        // distinct rather than sharing one builder.
+        function joinLinkFor(code) {
+            return `${APP_URL}?join=${encodeURIComponent(code)}`;
         }
 
         // redeem_child_invite raises these. Expired and already-used are the
@@ -8097,7 +8143,10 @@
             closeAuthScreen();
             updateFamilyMembersPreview();
             trackFamilyAccountCreated();
-            alert(`Account created! 💙\n\nYour Family Code: ${familyCode}\n\nTo let someone see a child's health records, open Family Members and share that child's invite code — they'll only ever see the child you invite them to.`);
+            // Leads with what to do next rather than with the family code.
+            // The code grants no access to any child, so announcing it first
+            // taught new parents to send the wrong thing.
+            alert(`Account created! 💙\n\nTo let someone see a child's health records, open Family Members, pick the child, and send that child's invite. They'll only ever see the child you invite them to.\n\n(Your family account code is ${familyCode} — that one only adds someone to your account, without sharing any health records.)`);
         }
 
         // ── JOINING A HOUSEHOLD ──────────────────────────────────────────
@@ -8201,6 +8250,59 @@
                 console.warn('[SickleStrong] could not read invite from URL', err);
                 return null;
             }
+        }
+
+        // ── HOUSEHOLD JOIN LINKS (?join=WORD-1234) ───────────────────────
+
+        // Deliberately narrower than the invite reader. A household code grants
+        // nothing on its own, so a mangled one isn't worth alarming anyone
+        // over — it's ignored rather than reported. A burned invite is worth
+        // explaining, which is why that path still warns.
+        function readJoinCodeFromUrl() {
+            try {
+                const params = new URLSearchParams(location.search);
+                const raw = params.get('join');
+                // Strip it whether or not it turns out to be usable, so a
+                // refresh never replays it.
+                if (raw !== null) {
+                    const url = new URL(location.href);
+                    url.searchParams.delete('join');
+                    history.replaceState({}, '', url.pathname + url.search + url.hash);
+                }
+                if (!raw) return null;
+                // normalizeJoinCode already repairs en/em dashes and stray
+                // whitespace, which is exactly what messaging apps introduce.
+                const code = normalizeJoinCode(raw);
+                return classifyJoinCode(code) === 'family' ? code : null;
+            } catch (err) {
+                console.warn('[SickleStrong] could not read join code from URL', err);
+                return null;
+            }
+        }
+
+        // Prefills rather than joins. A link must not change account state on
+        // its own — the person still presses Join Household themselves.
+        async function handleJoinLink(code) {
+            if (!code) return;
+
+            const { data: { session } } = await sb.auth.getSession();
+            if (session) {
+                if (familyAuth.familyCode === code) {
+                    alert(`You're already in this household. 💙\n\nNothing more to do — you can close this.`);
+                } else {
+                    alert(`You're already signed in to SickleStrong.\n\nTo join a different household you'd need to sign out and join with this code from that account.`);
+                }
+                return;
+            }
+
+            const authScreen = document.getElementById('authScreen');
+            const input = document.getElementById('familyCodeInput');
+            if (!authScreen || !input) return;
+
+            switchAuthTab('login');
+            authScreen.classList.add('active');
+            input.value = code;
+            input.focus();
         }
 
         async function handleInviteLink(invite) {
@@ -8603,20 +8705,27 @@
                     </div>
                 `).join('')}` : '';
 
+            // Deliberately quieter than the per-child invites above it. This
+            // used to be the loudest element on the screen — 22px, bold, on a
+            // gradient — which is exactly backwards: it's the code that grants
+            // no access to any child, and the visual weight was getting it sent
+            // to people who were expecting to see a child's records.
             const familyCodeBlock = familyCode ? `
-                <div class="report-section-title">Your household code</div>
-                <div style="background:linear-gradient(135deg,var(--primary-faint),var(--purple-light));
-                            border-radius:14px;padding:14px 16px;margin-bottom:16px;text-align:center;">
-                    <div style="font-size:22px;font-weight:800;font-family:'Sora',sans-serif;color:var(--text);letter-spacing:.1em;">${escapeHtml(familyCode)}</div>
-                    <div style="font-size:11px;color:var(--text-light);margin-top:6px;line-height:1.5;">
-                        Joins someone to your household only. It does <strong>not</strong> give
-                        access to any child's records — send a child invite for that.
+                <div class="report-section-title">Family account</div>
+                <div style="background:var(--bg);border:1px solid var(--border);
+                            border-radius:14px;padding:12px 14px;margin-bottom:16px;">
+                    <div style="font-size:11px;color:var(--text-light);line-height:1.5;margin-bottom:10px;">
+                        Adds someone to your family account. It does <strong>not</strong> share
+                        any child's health records — send a child invite above for that.
                     </div>
-                    <button data-copy-code="${escapeHtml(familyCode)}"
-                        style="margin-top:8px;background:var(--primary);color:white;border:none;border-radius:10px;
-                               padding:6px 16px;font-size:12px;font-weight:600;cursor:pointer;font-family:'Sora',sans-serif;">
-                        Copy Code
-                    </button>
+                    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                        <div style="font-family:'Sora',sans-serif;font-weight:700;font-size:15px;
+                                    letter-spacing:.08em;color:var(--text);">${escapeHtml(familyCode)}</div>
+                        <div style="margin-left:auto;display:flex;gap:8px;">
+                            <button class="btn btn-primary btn-small" data-share-code="${escapeHtml(familyCode)}">Share</button>
+                            <button class="btn btn-secondary btn-small" data-copy-code="${escapeHtml(familyCode)}">Copy</button>
+                        </div>
+                    </div>
                 </div>` : '';
 
             modal.innerHTML = `
@@ -8625,7 +8734,9 @@
                     <div class="modal-title">👨‍👩‍👧‍👦 Family &amp; Sharing</div>
                     ${auth ? '' : signedOutBlock}
                     ${auth ? `<div style="font-size:12px;color:var(--text-light);line-height:1.6;margin-bottom:12px;">
-                        Access is per child — someone you invite sees only the child you invite them to.
+                        <strong style="color:var(--text);">To share a child's health records, send that child's invite.</strong>
+                        Access is per child — someone you invite sees only the child you invite them to,
+                        and nothing about any sibling.
                     </div>` : ''}
                     ${auth ? circlesBlock : ''}
                     ${auth ? inactiveBlock : ''}
@@ -8640,6 +8751,9 @@
             // in it would otherwise break out of the attribute.
             modal.querySelectorAll('[data-copy-code]').forEach(btn => {
                 btn.addEventListener('click', () => copyTextToClipboard(btn.dataset.copyCode));
+            });
+            modal.querySelectorAll('[data-share-code]').forEach(btn => {
+                btn.addEventListener('click', () => shareHouseholdCode(btn.dataset.shareCode));
             });
             modal.querySelectorAll('[data-invite-child]').forEach(btn => {
                 btn.addEventListener('click', () => showInviteComposer(btn.dataset.inviteChild));
@@ -9285,6 +9399,15 @@
             // to show — it changes whether we open the wizard or a join prompt.
             const pendingInvite = readInviteFromUrl();
 
+            // The join code is always read — and therefore always stripped from
+            // the address bar — even when an invite is also present, so a
+            // refresh can't replay it. But an invite wins outright: it's the
+            // link that actually grants access, and acting on both would drop
+            // someone into a household nobody asked them to join. Decided here
+            // rather than left to the order the two are handled in.
+            const joinFromUrl = readJoinCodeFromUrl();
+            const pendingJoin = pendingInvite ? null : joinFromUrl;
+
             // Cloud work is best-effort: a network failure here must never stop
             // the wizard or the main app from rendering below.
             try {
@@ -9352,6 +9475,8 @@
             // Last, so it opens over a fully rendered app rather than racing it.
             if (pendingInvite) {
                 await handleInviteLink(pendingInvite);
+            } else if (pendingJoin) {
+                await handleJoinLink(pendingJoin);
             }
         });
     </script>
