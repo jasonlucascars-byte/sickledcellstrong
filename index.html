@@ -8298,7 +8298,18 @@
                 if (familyAuth.familyCode === code) {
                     alert(`You're already in this household. 💙\n\nNothing more to do — you can close this.`);
                 } else {
-                    alert(`You're already signed in to SickleStrong.\n\nTo join a different household you'd need to sign out and join with this code from that account.`);
+                    // The old message here told people to sign out and rejoin,
+                    // which was never true — provision_current_user ignores
+                    // join codes for an already-provisioned account. The
+                    // switch_household RPC moves the account directly, and
+                    // child access is independent of household membership, so
+                    // nothing they can already see is at stake.
+                    const confirmed = confirm(
+                        `Switch to household ${code}?\n\n` +
+                        `You're already signed in, so this switches your account directly — no need to sign out. ` +
+                        `Any child you can already see stays visible either way; this only changes which household you're part of.`
+                    );
+                    if (confirmed) await switchHouseholdNow(code);
                 }
                 return;
             }
@@ -8311,6 +8322,27 @@
             authScreen.classList.add('active');
             input.value = code;
             input.focus();
+        }
+
+        // Same shape and error handling as redeemInviteNow. The RPC only
+        // moves users.family_id; child_access is untouched, which is why the
+        // success copy can promise that visible children stay visible.
+        async function switchHouseholdNow(code) {
+            const { data, error } = await sb.rpc('switch_household', { p_join_code: code });
+            if (error || !data || data.length === 0) {
+                const message = provisioningErrorMessage(error);
+                console.warn('[SickleStrong] household switch failed', error);
+                alert(message || "We couldn't switch households just now. Please try again in a moment.");
+                return;
+            }
+
+            const row = data[0];
+            familyAuth.familyCode = row.out_family_code;
+            await syncAllFromCloud();
+            updateFamilyMembersPreview();
+            updateUI();
+
+            alert(`You're now part of the ${row.out_family_code} household. 💙\n\nAny children you could already see are still right where you left them.`);
         }
 
         async function handleInviteLink(invite) {
