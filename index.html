@@ -8272,8 +8272,11 @@
                 if (!raw) return null;
                 // normalizeJoinCode already repairs en/em dashes and stray
                 // whitespace, which is exactly what messaging apps introduce.
+                // A param that survives normalisation but still isn't a
+                // household code is reported, not swallowed — same shape as
+                // the invite reader, so both consumers branch the same way.
                 const code = normalizeJoinCode(raw);
-                return classifyJoinCode(code) === 'family' ? code : null;
+                return classifyJoinCode(code) === 'family' ? code : { invalid: raw };
             } catch (err) {
                 console.warn('[SickleStrong] could not read join code from URL', err);
                 return null;
@@ -8284,6 +8287,11 @@
         // its own — the person still presses Join Household themselves.
         async function handleJoinLink(code) {
             if (!code) return;
+
+            if (code.invalid !== undefined) {
+                alert("We didn't recognize that family code.\n\nIt may have been cut short by the app it was sent in — ask them to send it again.");
+                return;
+            }
 
             const { data: { session } } = await sb.auth.getSession();
             if (session) {
