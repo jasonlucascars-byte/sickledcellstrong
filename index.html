@@ -783,6 +783,48 @@
         }
         .modal-actions .btn { flex: 1; }
 
+        /* The household code lives behind a disclosure. The summary needs to
+           read as a control, not stray text: a chevron that points at what
+           expanding will do, a full-width touch target, and press feedback on
+           pointer-down like every other control. */
+        .household-disclosure summary {
+            list-style: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            min-height: 44px;
+            padding: 6px 2px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-light);
+            cursor: pointer;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: manipulation;
+        }
+        .household-disclosure summary::-webkit-details-marker { display: none; }
+        .household-disclosure summary::before {
+            content: '';
+            width: 7px;
+            height: 7px;
+            border-right: 2px solid var(--text-light);
+            border-bottom: 2px solid var(--text-light);
+            transform: rotate(-45deg);   /* points right: "there's more" */
+            transition: transform 200ms ease;
+            flex-shrink: 0;
+        }
+        .household-disclosure[open] summary::before {
+            transform: rotate(45deg);    /* points down: "it's open" */
+        }
+        .household-disclosure summary:active { opacity: 0.6; }
+        .household-disclosure summary:focus-visible {
+            outline: 2px solid var(--primary);
+            outline-offset: 2px;
+            border-radius: 8px;
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .household-disclosure summary::before { transition: none; }
+        }
+
         .modal-close {
             position: absolute;
             top: 14px;
@@ -7616,11 +7658,14 @@
 
         async function shareInviteCode(code, childName) {
             const link = inviteLinkFor(code);
-            const who = childName ? `${childName}'s care team` : 'our family';
-            const message =
-                `Join ${who} on SickleStrong:\n\n${link}\n\n`
-                + (childName ? `The link works for 14 days.\n\n` : '')
-                + NOTHING_TO_INSTALL;
+            // Two genuinely different situations, kept distinct: the no-name
+            // case is a family invite and shouldn't inherit the sickle cell
+            // framing on behalf of a child it isn't about.
+            const message = childName
+                ? `I'm using SickleStrong to track ${childName}'s sickle cell care, and I'd `
+                  + `like you on the care team:\n\n${link}\n\nThe link works for 14 days.\n\n`
+                  + NOTHING_TO_INSTALL
+                : `Join our family on SickleStrong:\n\n${link}\n\n` + NOTHING_TO_INSTALL;
             await shareViaSheet('SickleStrong invite', message, code);
         }
 
@@ -7629,11 +7674,15 @@
         // a child's logs should find out here, not after making an account.
         async function shareHouseholdCode(code) {
             const link = joinLinkFor(code);
+            // Written for the person receiving it, who may not know what
+            // SickleStrong is or that this family is dealing with sickle cell
+            // disease. The sender has all the context; the message can't
+            // assume the reader has any.
             const message =
-                `Join our family on SickleStrong:\n\n${link}\n\n`
-                + `This adds you to our household. It doesn't include any `
-                + `child's health records — you'll get a separate invite for `
-                + `that.\n\n`
+                `I'm using SickleStrong to keep track of my child's sickle cell care, `
+                + `and I'd like to add you to our family account:\n\n${link}\n\n`
+                + `This lets us manage things together. It doesn't show you any child's `
+                + `health records on its own — I'll send a separate invite for that.\n\n`
                 + NOTHING_TO_INSTALL;
             await shareViaSheet('SickleStrong household', message, code);
         }
@@ -7668,7 +7717,7 @@
                 return `This invite link was cancelled.\n\nAsk whoever sent it to share a new one.`;
             }
             if (raw.includes('INVALID_INVITE_CODE')) {
-                return `We didn't recognise that invite link.\n\nIt may have been cut short by the app it was sent in — ask for it again.`;
+                return `We didn't recognize that invite link.\n\nIt may have been cut short by the app it was sent in — ask for it again.`;
             }
             if (raw.includes('CHILD_NOT_FOUND')) {
                 return `That invite is no longer available.\n\nThe profile it pointed to has been removed.`;
@@ -8143,10 +8192,11 @@
             closeAuthScreen();
             updateFamilyMembersPreview();
             trackFamilyAccountCreated();
-            // Leads with what to do next rather than with the family code.
-            // The code grants no access to any child, so announcing it first
-            // taught new parents to send the wrong thing.
-            alert(`Account created! 💙\n\nTo let someone see a child's health records, open Family Members, pick the child, and send that child's invite. They'll only ever see the child you invite them to.\n\n(Your family account code is ${familyCode} — that one only adds someone to your account, without sharing any health records.)`);
+            // Leads with what to do next. The family code isn't mentioned at
+            // all any more — it now lives behind a disclosure in Family &
+            // Sharing, and announcing it here taught new parents to send the
+            // wrong thing.
+            alert(`Account created! 💙\n\nTo let someone see a child's health records, open Family Members, pick the child, and send that child's invite. They'll only ever see the child you invite them to — nothing about any sibling.`);
         }
 
         // ── JOINING A HOUSEHOLD ──────────────────────────────────────────
@@ -8347,7 +8397,7 @@
 
         async function handleInviteLink(invite) {
             if (invite && invite.invalid !== undefined) {
-                alert("We didn't recognise that invite link.\n\nIt may have been cut short by the app it was sent in — ask for it again.");
+                alert("We didn't recognize that invite link.\n\nIt may have been cut short by the app it was sent in — ask for it again.");
                 return;
             }
             if (cloudIsOffline()) {
@@ -8745,28 +8795,31 @@
                     </div>
                 `).join('')}` : '';
 
-            // Deliberately quieter than the per-child invites above it. This
-            // used to be the loudest element on the screen — 22px, bold, on a
-            // gradient — which is exactly backwards: it's the code that grants
-            // no access to any child, and the visual weight was getting it sent
-            // to people who were expecting to see a child's records.
+            // Collapsed by default. Household codes are low-entropy and now
+            // provably consequential, so the code is something you go looking
+            // for, not something the app puts in front of you. Share is
+            // secondary here on purpose — the child invite above is the only
+            // primary action in this modal.
             const familyCodeBlock = familyCode ? `
-                <div class="report-section-title">Family account</div>
-                <div style="background:var(--bg);border:1px solid var(--border);
-                            border-radius:14px;padding:12px 14px;margin-bottom:16px;">
-                    <div style="font-size:11px;color:var(--text-light);line-height:1.5;margin-bottom:10px;">
-                        Adds someone to your family account. It does <strong>not</strong> share
-                        any child's health records — send a child invite above for that.
-                    </div>
-                    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-                        <div style="font-family:'Sora',sans-serif;font-weight:700;font-size:15px;
-                                    letter-spacing:.08em;color:var(--text);">${escapeHtml(familyCode)}</div>
-                        <div style="margin-left:auto;display:flex;gap:8px;">
-                            <button class="btn btn-primary btn-small" data-share-code="${escapeHtml(familyCode)}">Share</button>
-                            <button class="btn btn-secondary btn-small" data-copy-code="${escapeHtml(familyCode)}">Copy</button>
+                <details class="household-disclosure" style="margin-bottom:16px;">
+                    <summary>Add someone to your family account</summary>
+                    <div style="background:var(--bg);border:1px solid var(--border);
+                                border-radius:14px;padding:12px 14px;margin-top:8px;">
+                        <div style="font-size:12px;color:var(--text-light);line-height:1.6;margin-bottom:12px;">
+                            This code adds someone to your account so you can manage children together.
+                            It does <strong>not</strong> show them any child's health records — for that,
+                            send that child's invite above.
+                        </div>
+                        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                            <div style="font-family:'Sora',sans-serif;font-weight:700;font-size:15px;
+                                        letter-spacing:.08em;color:var(--text);">${escapeHtml(familyCode)}</div>
+                            <div style="margin-left:auto;display:flex;gap:8px;">
+                                <button class="btn btn-secondary btn-small" data-share-code="${escapeHtml(familyCode)}">Share</button>
+                                <button class="btn btn-secondary btn-small" data-copy-code="${escapeHtml(familyCode)}">Copy</button>
+                            </div>
                         </div>
                     </div>
-                </div>` : '';
+                </details>` : '';
 
             modal.innerHTML = `
                 <div class="modal-content" style="max-width:460px;">
@@ -9040,7 +9093,7 @@
                         </div>
                     `).join('')}
                     <div style="font-size:12px;color:var(--text-light);">
-                        ${members.length} with access${familyAuth.familyCode ? ` · Household: <strong>${escapeHtml(familyAuth.familyCode)}</strong>` : ''}
+                        ${members.length} with access
                     </div>
                 </div>
             `;
