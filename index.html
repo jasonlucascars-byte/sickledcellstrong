@@ -2312,17 +2312,17 @@
                         <label class="input-label">${wizardData.selfTracking ? 'Your Name *' : 'Primary Parent/Caregiver Name *'}</label>
                         <input type="text" class="input-field" id="parent1Name"
                                placeholder="${wizardData.selfTracking ? 'Your full name' : 'Your name'}"
-                               value="${wizardData.parent1Name || ''}">
+                               value="${escapeHtml(wizardData.parent1Name || '')}">
                     </div>
                     <div class="input-group">
                         <label class="input-label">${wizardData.selfTracking ? 'Your Phone *' : 'Phone Number *'}</label>
                         <input type="tel" class="input-field" id="parent1Phone"
-                               placeholder="(555) 123-4567" value="${wizardData.parent1Phone || ''}">
+                               placeholder="(555) 123-4567" value="${escapeHtml(wizardData.parent1Phone || '')}">
                     </div>
                     <div class="input-group">
                         <label class="input-label">${wizardData.selfTracking ? 'Your Email *' : 'Email *'}</label>
                         <input type="email" class="input-field" id="parent1Email"
-                               placeholder="your@email.com" value="${wizardData.parent1Email || ''}">
+                               placeholder="your@email.com" value="${escapeHtml(wizardData.parent1Email || '')}">
                     </div>
                     
                     <div style="border-top:2px dashed var(--border);padding-top:20px;margin-top:20px;">
@@ -2333,17 +2333,17 @@
                             <label class="input-label">Name</label>
                             <input type="text" class="input-field" id="parent2Name"
                                    placeholder="${wizardData.selfTracking ? 'Spouse, parent, close friend' : 'Optional'}"
-                                   value="${wizardData.parent2Name || ''}">
+                                   value="${escapeHtml(wizardData.parent2Name || '')}">
                         </div>
                         <div class="input-group">
                             <label class="input-label">Phone</label>
                             <input type="tel" class="input-field" id="parent2Phone"
-                                   placeholder="Optional" value="${wizardData.parent2Phone || ''}">
+                                   placeholder="Optional" value="${escapeHtml(wizardData.parent2Phone || '')}">
                         </div>
                         <div class="input-group">
                             <label class="input-label">Email</label>
                             <input type="email" class="input-field" id="parent2Email"
-                                   placeholder="Optional" value="${wizardData.parent2Email || ''}">
+                                   placeholder="Optional" value="${escapeHtml(wizardData.parent2Email || '')}">
                         </div>
                     </div>
                     
@@ -2358,7 +2358,7 @@
                         <label class="input-label">${wizardData.selfTracking ? 'Your Name *' : "Child's Name *"}</label>
                         <input type="text" class="input-field" id="childName"
                                placeholder="${wizardData.selfTracking ? 'Your name' : 'Enter name'}"
-                               value="${wizardData.childName || ''}">
+                               value="${escapeHtml(wizardData.childName || '')}">
                     </div>
                     <div class="input-group">
                         <label class="input-label">Choose Avatar</label>
@@ -2418,12 +2418,12 @@
                     </div>
                     <div class="input-group">
                         <label class="input-label">${wizardData.selfTracking ? 'Your Date of Birth *' : 'Birth Date *'}</label>
-                        <input type="date" class="input-field" id="childBirthDate" value="${wizardData.childBirthDate || ''}">
+                        <input type="date" class="input-field" id="childBirthDate" value="${escapeHtml(wizardData.childBirthDate || '')}">
                     </div>
                     <div class="input-group">
                         <label class="input-label">${wizardData.selfTracking ? 'Your Weight (lbs) *' : 'Current Weight (lbs) *'}</label>
                         <input type="number" class="input-field" id="childWeight"
-                               placeholder="e.g., 150" value="${wizardData.childWeight || ''}">
+                               placeholder="e.g., 150" value="${escapeHtml(wizardData.childWeight || '')}">
                         <p style="font-size:12px;color:var(--text-light);margin-top:4px;">
                             Used to calculate daily hydration needs
                         </p>
@@ -2491,19 +2491,19 @@
                 render: () => `
                     <div class="input-group">
                         <label class="input-label">Hematologist Name</label>
-                        <input type="text" class="input-field" id="hematologistName" placeholder="Dr. Sarah Johnson" value="${wizardData.hematologistName || ''}">
+                        <input type="text" class="input-field" id="hematologistName" placeholder="Dr. Sarah Johnson" value="${escapeHtml(wizardData.hematologistName || '')}">
                     </div>
                     <div class="input-group">
                         <label class="input-label">Phone Number</label>
-                        <input type="tel" class="input-field" id="hematologistPhone" placeholder="(555) 123-4567" value="${wizardData.hematologistPhone || ''}">
+                        <input type="tel" class="input-field" id="hematologistPhone" placeholder="(555) 123-4567" value="${escapeHtml(wizardData.hematologistPhone || '')}">
                     </div>
                     <div class="input-group">
                         <label class="input-label">Email Address</label>
-                        <input type="email" class="input-field" id="hematologistEmail" placeholder="doctor@hospital.com" value="${wizardData.hematologistEmail || ''}">
+                        <input type="email" class="input-field" id="hematologistEmail" placeholder="doctor@hospital.com" value="${escapeHtml(wizardData.hematologistEmail || '')}">
                     </div>
                     <div class="input-group">
                         <label class="input-label">Diagnosis Date (if known)</label>
-                        <input type="date" class="input-field" id="diagnosisDate" value="${wizardData.diagnosisDate || ''}">
+                        <input type="date" class="input-field" id="diagnosisDate" value="${escapeHtml(wizardData.diagnosisDate || '')}">
                     </div>
                     <p style="font-size: 12px; color: var(--text-light); margin-bottom: 20px;">
                         This information will be saved in your Emergency Contacts for quick access.
@@ -2522,7 +2522,7 @@
                     }
                     return `
                         <p style="color: var(--text); margin-bottom: 16px;">
-                            For <strong>${diseaseInfo.fullName}</strong>, these medications are commonly prescribed. <strong>Select the ones ${wizardData.childName} is currently taking:</strong>
+                            For <strong>${diseaseInfo.fullName}</strong>, these medications are commonly prescribed. <strong>Select the ones ${escapeHtml(wizardData.childName)} is currently taking:</strong>
                         </p>
                         <div id="defaultMedsList" style="margin-bottom: 20px;">
                             ${diseaseInfo.defaultMeds.map((med, idx) => `
@@ -2727,9 +2727,9 @@
                     <div style="background: var(--bg); padding: 16px; border-radius: 12px; margin-bottom: 12px; border-left: 4px solid var(--primary);">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
                             <div style="font-size: 13px; color: var(--text-light);">${new Date(note.date).toLocaleDateString()}</div>
-                            <div style="font-size: 24px;">${note.mood}</div>
+                            <div style="font-size: 24px;">${escapeHtml(note.mood)}</div>
                         </div>
-                        <div style="font-size: 14px; line-height: 1.6; color: var(--text);">${note.text}</div>
+                        <div style="font-size: 14px; line-height: 1.6; color: var(--text);">${escapeHtml(note.text)}</div>
                     </div>
                 `;
             });
@@ -2853,7 +2853,7 @@
             modal.innerHTML = `
                 <div class="modal-content" style="max-width: 500px;">
                     <button class="modal-close" onclick="closePainMapAndClear()">×</button>
-                    <div class="modal-title">Where does ${child.name} hurt?</div>
+                    <div class="modal-title">Where does ${escapeHtml(child.name)} hurt?</div>
                     <p style="font-size: 13px; color: var(--text-light); margin-bottom: 12px;">Tap all body parts that hurt</p>
                     
                     <!-- Toggle Buttons -->
@@ -2869,7 +2869,7 @@
                     <!-- Selected areas indicator -->
                     ${window.selectedPainLocations.length > 0 ? `
                         <div style="background: #F0F9FF; padding: 8px 12px; border-radius: 8px; margin-bottom: 12px; font-size: 12px;">
-                            <strong>Selected:</strong> ${window.selectedPainLocations.join(', ')}
+                            <strong>Selected:</strong> ${window.selectedPainLocations.map(escapeHtml).join(', ')}
                         </div>
                     ` : ''}
                     
@@ -3065,7 +3065,7 @@
                 <div class="modal-content" style="max-width: 400px;">
                     <button class="modal-close" onclick="this.closest('.modal').remove()">×</button>
                     <div class="modal-title">How much pain?</div>
-                    <p style="font-size: 13px; color: var(--text-light); margin-bottom: 8px;">Locations: <strong>${locationsList}</strong></p>
+                    <p style="font-size: 13px; color: var(--text-light); margin-bottom: 8px;">Locations: <strong>${escapeHtml(locationsList)}</strong></p>
                     <p style="font-size: 13px; color: var(--text-light); margin-bottom: 20px;">Tap the face that matches</p>
                     
                     <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px;">
@@ -3122,7 +3122,7 @@
                     <div class="modal-title">Additional Information</div>
                     
                     <div class="input-group">
-                        <label class="input-label">🌡️ Does ${child.name} have a fever?</label>
+                        <label class="input-label">🌡️ Does ${escapeHtml(child.name)} have a fever?</label>
                         <div style="display: flex; gap: 12px;">
                             <button type="button" onclick="selectFeverStatus(false)" id="noFeverBtn" class="btn btn-secondary" style="flex: 1;">No Fever</button>
                             <button type="button" onclick="selectFeverStatus(true)" id="hasFeverBtn" class="btn btn-secondary" style="flex: 1;">Has Fever</button>
@@ -3190,7 +3190,7 @@
                     <div class="modal-title">Additional Information</div>
                     
                     <div class="input-group">
-                        <label class="input-label">🌡️ Does ${child.name} have a fever?</label>
+                        <label class="input-label">🌡️ Does ${escapeHtml(child.name)} have a fever?</label>
                         <div style="display: flex; gap: 12px;">
                             <button type="button" onclick="selectFeverStatus(false)" id="noFeverBtn" class="btn btn-secondary" style="flex: 1;">No Fever</button>
                             <button type="button" onclick="selectFeverStatus(true)" id="hasFeverBtn" class="btn btn-secondary" style="flex: 1;">Has Fever</button>
@@ -3302,10 +3302,10 @@
             modal.innerHTML = `
                 <div class="modal-content" style="max-width: 400px;">
                     <button class="modal-close" onclick="this.closest('.modal').remove()">×</button>
-                    <div class="modal-title">Log ${child.name}'s Temperature</div>
+                    <div class="modal-title">Log ${escapeHtml(child.name)}'s Temperature</div>
                     
                     <div class="input-group">
-                        <label class="input-label">Does ${child.name} have a fever?</label>
+                        <label class="input-label">Does ${escapeHtml(child.name)} have a fever?</label>
                         <div style="display: flex; gap: 12px;">
                             <button type="button" onclick="selectTempFeverStatus(false)" id="tempNoFeverBtn" class="btn btn-secondary" style="flex: 1;">No Fever</button>
                             <button type="button" onclick="selectTempFeverStatus(true)" id="tempHasFeverBtn" class="btn btn-secondary" style="flex: 1;">Has Fever</button>
@@ -3381,14 +3381,14 @@
                 childrenInputs += `
                     <div style="background: var(--bg); padding: 16px; border-radius: 12px; margin-bottom: 12px;">
                         <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px;">
-                            <span style="font-size: 28px;">${child.emoji}</span>
+                            <span style="font-size: 28px;">${escapeHtml(child.emoji)}</span>
                             <div>
-                                <div style="font-weight: 600;">${child.name}</div>
+                                <div style="font-weight: 600;">${escapeHtml(child.name)}</div>
                                 <div style="font-size: 12px; color: var(--text-light);">${child.displayAge}</div>
                             </div>
                         </div>
                         <div style="display: flex; gap: 12px; align-items: center;">
-                            <input type="number" class="input-field quick-temp-input" data-child-index="${index}" placeholder="98.6" step="0.1" min="95" max="106" value="${lastTemp}" style="flex: 1;">
+                            <input type="number" class="input-field quick-temp-input" data-child-index="${index}" placeholder="98.6" step="0.1" min="95" max="106" value="${escapeHtml(lastTemp)}" style="flex: 1;">
                             <span style="font-size: 14px; color: var(--text-light);">°F</span>
                         </div>
                     </div>
@@ -3462,7 +3462,7 @@
                     </div>
                     
                     <div style="text-align: center; margin-bottom: 20px;">
-                        <div style="font-size: 20px; font-weight: 600; margin-bottom: 8px;">${child.name}'s temperature: ${temperature}°F</div>
+                        <div style="font-size: 20px; font-weight: 600; margin-bottom: 8px;">${escapeHtml(child.name)}'s temperature: ${escapeHtml(temperature)}°F</div>
                     </div>
                     
                     <div style="background: #FFF3E0; padding: 16px; border-radius: 12px; margin-bottom: 20px; border-left: 4px solid var(--warning);">
@@ -3478,8 +3478,8 @@
                     
                     <div style="display: grid; gap: 12px;">
                         ${appData.contacts.length > 0 ? `
-                            <button class="btn" style="background: var(--primary); color: white; font-size: 16px; padding: 16px; font-weight: 700;" onclick="window.location.href='tel:${appData.contacts[0].phone}'">
-                                📞 Call ${appData.contacts[0].name}
+                            <button class="btn" style="background: var(--primary); color: white; font-size: 16px; padding: 16px; font-weight: 700;" onclick="window.location.href='tel:${jsArg(appData.contacts[0].phone)}'">
+                                📞 Call ${escapeHtml(appData.contacts[0].name)}
                             </button>
                         ` : ''}
                         <button class="btn" style="background: var(--emergency); color: white; font-size: 16px; padding: 16px; font-weight: 700;" onclick="window.location.href='tel:911'">
@@ -3506,18 +3506,18 @@
                     </div>
                     
                     <div style="background: #FFF8F0; padding: 16px; border-radius: 12px; margin-bottom: 16px;">
-                        <div style="font-weight: 600; margin-bottom: 8px;">${child.name}'s ${painEntry.location}: ${painEntry.emoji} (${painEntry.level}/10)</div>
+                        <div style="font-weight: 600; margin-bottom: 8px;">${escapeHtml(child.name)}'s ${escapeHtml(painEntry.location)}: ${escapeHtml(painEntry.emoji)} (${escapeHtml(painEntry.level)}/10)</div>
                         <p style="font-size: 14px; margin-bottom: 12px;">Severe pain may indicate a crisis. Make sure:</p>
                         <ul style="margin-left: 20px; font-size: 14px; line-height: 1.8;">
-                            <li>${child.name} is drinking plenty of water</li>
+                            <li>${escapeHtml(child.name)} is drinking plenty of water</li>
                             <li>Medication has been given if prescribed</li>
-                            <li>${child.name} is resting comfortably</li>
+                            <li>${escapeHtml(child.name)} is resting comfortably</li>
                         </ul>
                     </div>
                     
                     ${appData.contacts.length > 0 ? `
-                        <button class="btn btn-primary btn-full" onclick="window.location.href='tel:${appData.contacts[0].phone}'">
-                            Call ${appData.contacts[0].name}
+                        <button class="btn btn-primary btn-full" onclick="window.location.href='tel:${jsArg(appData.contacts[0].phone)}'">
+                            Call ${escapeHtml(appData.contacts[0].name)}
                         </button>
                     ` : ''}
                     <button class="btn btn-secondary btn-full" onclick="this.closest('.modal').remove()">
@@ -3540,7 +3540,7 @@
                     : null;
                 
                 const tempDisplay = lastTemp 
-                    ? `${lastTemp.temperature}°F`
+                    ? `${escapeHtml(lastTemp.temperature)}°F`
                     : 'Not checked';
                 
                 const tempColor = lastTemp && lastTemp.temperature >= 101.3 
@@ -3561,9 +3561,9 @@
                 
                 html += `
                     <div style="display: flex; align-items: center; gap: 12px; padding: 12px; background: ${lastTemp && lastTemp.temperature >= 101.3 ? '#FFE5E5' : 'var(--bg)'}; border-radius: 8px; margin-bottom: 8px;">
-                        <div style="font-size: 32px;">${child.emoji}</div>
+                        <div style="font-size: 32px;">${escapeHtml(child.emoji)}</div>
                         <div style="flex: 1;">
-                            <div style="font-weight: 600;">${child.name}</div>
+                            <div style="font-weight: 600;">${escapeHtml(child.name)}</div>
                             <div style="font-size: 12px; color: var(--text-light);">Last: ${timeAgo}</div>
                         </div>
                         <div style="text-align: right;">
@@ -3608,7 +3608,7 @@
                                 padding:20px 24px;display:flex;justify-content:space-between;align-items:center;">
                         <div>
                             <div style="color:rgba(14,168,154,0.8);font-size:11px;font-weight:700;
-                                        letter-spacing:.1em;text-transform:uppercase;">${child.name}</div>
+                                        letter-spacing:.1em;text-transform:uppercase;">${escapeHtml(child.name)}</div>
                             <div style="color:white;font-size:18px;font-weight:800;
                                         font-family:'Sora',sans-serif;">Log Symptoms</div>
                             <div style="color:rgba(255,255,255,0.5);font-size:12px;margin-top:2px;">
@@ -3801,7 +3801,7 @@
                 const preview = document.getElementById('symptomPhotoPreview');
                 if (preview) {
                     preview.innerHTML = `
-                        <img src="${e.target.result}"
+                        <img src="${escapeHtml(e.target.result)}"
                              style="width:100%;max-height:200px;object-fit:cover;
                                     border-radius:12px;display:block;">
                         <div style="font-size:12px;color:var(--primary);font-weight:600;
@@ -3946,7 +3946,7 @@
                                     <span style="font-weight:800;font-size:14px;font-family:'Sora',sans-serif;">📋 Symptom Log</span>
                                     <span style="font-size:11px;background:${sevColor};color:white;
                                                  padding:2px 8px;border-radius:20px;font-weight:700;">
-                                        ${severityLabels[s.severity] || ''} (${s.severity}/5)
+                                        ${severityLabels[s.severity] || ''} (${escapeHtml(s.severity)}/5)
                                     </span>
                                     ${hasEmergency ? `<span style="font-size:11px;background:var(--emergency);color:white;padding:2px 8px;border-radius:20px;font-weight:700;">🚨 EMERGENCY</span>` : ''}
                                 </div>
@@ -3959,17 +3959,17 @@
                                                  padding:3px 10px;font-weight:600;
                                                  border:1px solid ${emergencySymptoms.includes(sym) ? 'var(--emergency)' : 'var(--border)'};
                                                  color:${emergencySymptoms.includes(sym) ? 'var(--emergency)' : 'var(--text-mid)'};">
-                                        ${sym.charAt(0).toUpperCase() + sym.slice(1)}
+                                        ${escapeHtml(sym.charAt(0).toUpperCase() + sym.slice(1))}
                                     </span>
                                 `).join('')}
                             </div>
 
-                            ${s.duration ? `<div style="font-size:12px;color:var(--text-light);margin-bottom:4px;">⏱️ Duration: ${s.duration}</div>` : ''}
-                            ${s.helped && s.helped.length > 0 ? `<div style="font-size:12px;color:var(--text-light);margin-bottom:4px;">💙 Helped: ${s.helped.join(', ')}</div>` : ''}
-                            ${s.notes ? `<div style="font-size:12px;font-style:italic;color:var(--text-mid);margin-top:4px;">"${s.notes}"</div>` : ''}
+                            ${s.duration ? `<div style="font-size:12px;color:var(--text-light);margin-bottom:4px;">⏱️ Duration: ${escapeHtml(s.duration)}</div>` : ''}
+                            ${s.helped && s.helped.length > 0 ? `<div style="font-size:12px;color:var(--text-light);margin-bottom:4px;">💙 Helped: ${s.helped.map(escapeHtml).join(', ')}</div>` : ''}
+                            ${s.notes ? `<div style="font-size:12px;font-style:italic;color:var(--text-mid);margin-top:4px;">"${escapeHtml(s.notes)}"</div>` : ''}
                             ${s.photo ? `
                                 <div style="margin-top:8px;">
-                                    <img src="${s.photo}"
+                                    <img src="${escapeHtml(s.photo)}"
                                          style="width:100%;max-height:140px;object-fit:cover;
                                                 border-radius:10px;border:1px solid var(--border);">
                                 </div>` : ''}
@@ -3986,16 +3986,16 @@
                                     <span style="font-weight:800;font-size:14px;font-family:'Sora',sans-serif;">🫁 Pain Episode</span>
                                     <span style="font-size:11px;background:${p.level >= 7 ? 'var(--emergency)' : 'var(--warning)'};
                                                  color:white;padding:2px 8px;border-radius:20px;font-weight:700;">
-                                        ${p.level}/10
+                                        ${escapeHtml(p.level)}/10
                                     </span>
                                 </div>
                                 <span style="font-size:11px;color:var(--text-light);">${timeStr}</span>
                             </div>
-                            <div style="font-size:13px;color:var(--text-mid);">${p.location || ''} ${p.emoji || ''}</div>
-                            ${p.temperature ? `<div style="font-size:12px;color:${p.temperature >= 101.3 ? 'var(--emergency)':'var(--text-light)'};margin-top:3px;">🌡️ ${p.temperature}°F ${p.temperature >= 101.3 ? '⚠️' : ''}</div>` : ''}
-                            ${p.helped && p.helped.length > 0 ? `<div style="font-size:12px;color:var(--text-light);margin-top:3px;">💙 Helped: ${p.helped.join(', ')}</div>` : ''}
-                            ${p.notes ? `<div style="font-size:12px;font-style:italic;color:var(--text-mid);margin-top:4px;">"${p.notes}"</div>` : ''}
-                            ${p.photoUri ? `<img src="${p.photoUri}" style="width:100%;max-height:120px;object-fit:cover;border-radius:10px;margin-top:8px;">` : ''}
+                            <div style="font-size:13px;color:var(--text-mid);">${escapeHtml(p.location || '')} ${escapeHtml(p.emoji || '')}</div>
+                            ${p.temperature ? `<div style="font-size:12px;color:${p.temperature >= 101.3 ? 'var(--emergency)':'var(--text-light)'};margin-top:3px;">🌡️ ${escapeHtml(p.temperature)}°F ${p.temperature >= 101.3 ? '⚠️' : ''}</div>` : ''}
+                            ${p.helped && p.helped.length > 0 ? `<div style="font-size:12px;color:var(--text-light);margin-top:3px;">💙 Helped: ${p.helped.map(escapeHtml).join(', ')}</div>` : ''}
+                            ${p.notes ? `<div style="font-size:12px;font-style:italic;color:var(--text-mid);margin-top:4px;">"${escapeHtml(p.notes)}"</div>` : ''}
+                            ${p.photoUri ? `<img src="${escapeHtml(p.photoUri)}" style="width:100%;max-height:120px;object-fit:cover;border-radius:10px;margin-top:8px;">` : ''}
                         </div>
                     `;
 
@@ -4016,7 +4016,7 @@
                                 </div>
                                 <span style="font-size:11px;color:var(--text-light);">${timeStr}</span>
                             </div>
-                            ${t.notes ? `<div style="font-size:12px;font-style:italic;color:var(--text-mid);margin-top:6px;">"${t.notes}"</div>` : ''}
+                            ${t.notes ? `<div style="font-size:12px;font-style:italic;color:var(--text-mid);margin-top:6px;">"${escapeHtml(t.notes)}"</div>` : ''}
                         </div>
                     `;
                 }
@@ -4447,7 +4447,7 @@
                             <div style="font-size: 48px; margin-bottom: 16px;">📊</div>
                             <div style="font-size: 20px; font-weight: 700; margin-bottom: 12px;">Not Enough Data Yet</div>
                             <p style="color: var(--text-light); line-height: 1.6;">
-                                Pain patterns will appear after ${child.name} has at least 3 logged pain episodes.
+                                Pain patterns will appear after ${escapeHtml(child.name)} has at least 3 logged pain episodes.
                                 Keep tracking to see insights!
                             </p>
                         </div>
@@ -4463,7 +4463,7 @@
             modal.innerHTML = `
                 <div class="modal-content" style="max-width: 500px;">
                     <button class="modal-close" onclick="this.closest('.modal').remove()">×</button>
-                    <div class="modal-title">📊 ${child.name}'s Pain Patterns</div>
+                    <div class="modal-title">📊 ${escapeHtml(child.name)}'s Pain Patterns</div>
                     <p style="font-size: 13px; color: var(--text-light); margin-bottom: 20px;">
                         Based on ${patterns.totalEpisodes} pain episodes
                     </p>
@@ -4485,7 +4485,7 @@
                         <div style="font-weight: 700; margin-bottom: 12px;">🎯 Most Affected Areas</div>
                         ${patterns.topLocations.map((loc, idx) => `
                             <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
-                                <span>${idx + 1}. ${loc[0]}</span>
+                                <span>${idx + 1}. ${escapeHtml(loc[0])}</span>
                                 <span style="font-weight: 600; color: var(--primary);">${loc[1]} episode${loc[1] > 1 ? 's' : ''}</span>
                             </div>
                         `).join('')}
@@ -4521,7 +4521,7 @@
                     <div style="background: #F0F9FF; padding: 16px; border-radius: 12px; border-left: 4px solid var(--primary);">
                         <div style="font-weight: 700; margin-bottom: 8px;">💡 Insights</div>
                         <ul style="margin: 0; padding-left: 20px; font-size: 13px; line-height: 1.8; color: var(--text-light);">
-                            ${patterns.topLocations.length > 0 ? `<li>${child.name}'s ${patterns.topLocations[0][0].toLowerCase()} needs extra attention</li>` : ''}
+                            ${patterns.topLocations.length > 0 ? `<li>${escapeHtml(child.name)}'s ${escapeHtml(patterns.topLocations[0][0].toLowerCase())} needs extra attention</li>` : ''}
                             ${patterns.topTime ? `<li>Consider pre-hydrating during ${patterns.topTime} hours</li>` : ''}
                             ${patterns.severePainCount > 3 ? `<li>Discuss severe pain episodes with hematologist</li>` : ''}
                             ${patterns.trend === 'increasing' ? `<li>Pain increasing - monitor hydration and schedule doctor visit</li>` : ''}
@@ -4554,8 +4554,8 @@
                 
                 // Build avatar — photo takes priority over emoji
                 const avatarContent = child.photo
-                    ? `<img src="${child.photo}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`
-                    : (child.emoji || '👧🏾');
+                    ? `<img src="${escapeHtml(child.photo)}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`
+                    : escapeHtml(child.emoji || '👧🏾');
                 
                 html += `
                     <div class="child-option ${isActive ? 'active-option' : ''}"
@@ -4575,11 +4575,11 @@
                         <div style="flex:1;cursor:pointer;" onclick="switchChild('${child.id}')">
                             <div style="font-weight:700;font-size:15px;font-family:'Sora',sans-serif;
                                         color:${isActive ? 'var(--primary)' : 'var(--text)'};">
-                                ${child.name}
+                                ${escapeHtml(child.name)}
                                 ${isActive ? '<span style="font-size:11px;background:var(--primary-faint);color:var(--primary);padding:2px 8px;border-radius:20px;margin-left:6px;font-weight:600;">Active</span>' : ''}
                             </div>
                             <div style="font-size:12px;color:var(--text-light);margin-top:2px;">
-                                ${child.diseaseType} · ${child.displayAge}
+                                ${escapeHtml(child.diseaseType)} · ${child.displayAge}
                             </div>
                         </div>
                         
@@ -4660,16 +4660,16 @@
             // Update header avatar — photo takes priority over emoji
             const avatar = document.getElementById('currentChildAvatar');
             if (child.photo) {
-                avatar.innerHTML = `<img src="${child.photo}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`;
+                avatar.innerHTML = `<img src="${escapeHtml(child.photo)}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`;
                 avatar.style.padding = '0';
                 avatar.style.overflow = 'hidden';
             } else {
-                avatar.innerHTML = child.emoji || '👧🏾';
+                avatar.innerHTML = escapeHtml(child.emoji || '👧🏾');
                 avatar.style.padding = '';
                 avatar.style.overflow = '';
             }
             document.getElementById('currentChildName').textContent = child.name;
-            document.getElementById('currentChildDisease').textContent = `${child.diseaseType} • ${child.displayAge}`;
+            document.getElementById('currentChildDisease').textContent = `${escapeHtml(child.diseaseType)} • ${child.displayAge}`;
             
             // Update stats
             document.getElementById('todayMeds').textContent = child.todayMeds;
@@ -4738,7 +4738,7 @@
                             <div style="flex:1;">
                                 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                                     <span style="font-weight:800;font-size:15px;font-family:'Sora',sans-serif;">
-                                        ${med.name}
+                                        ${escapeHtml(med.name)}
                                     </span>
                                     ${med.critical||med.isCritical
                                         ? `<span style="font-size:10px;background:var(--emergency);color:white;
@@ -4753,12 +4753,12 @@
                                                         padding:2px 8px;border-radius:20px;font-weight:700;">🔔 REFILL SOON</span>`
                                         : ''}
                                 </div>
-                                <div style="font-size:13px;color:var(--text-light);margin-top:3px;">${med.dose || ''}</div>
+                                <div style="font-size:13px;color:var(--text-light);margin-top:3px;">${escapeHtml(med.dose || '')}</div>
                                 ${med.instructions
-                                    ? `<div style="font-size:12px;color:var(--text-light);margin-top:2px;font-style:italic;">${med.instructions}</div>`
+                                    ? `<div style="font-size:12px;color:var(--text-light);margin-top:2px;font-style:italic;">${escapeHtml(med.instructions)}</div>`
                                     : ''}
                                 ${med.doctor
-                                    ? `<div style="font-size:11px;color:var(--primary);margin-top:3px;font-weight:600;">👨‍⚕️ Dr. ${med.doctor}</div>`
+                                    ? `<div style="font-size:11px;color:var(--primary);margin-top:3px;font-weight:600;">👨‍⚕️ Dr. ${escapeHtml(med.doctor)}</div>`
                                     : ''}
                             </div>
                             <button data-requires="full" onclick="editMedication(${med.id})"
@@ -4777,7 +4777,7 @@
                             ${times.map((time, idx) => {
                                 const taken = takenToday.includes(time);
                                 return `
-                                    <button onclick="takeMedication(${med.id}, '${time}')"
+                                    <button onclick="takeMedication(${med.id}, '${jsArg(time)}')"
                                             style="display:flex;align-items:center;gap:6px;
                                                    padding:7px 12px;border-radius:10px;border:none;
                                                    background:${taken ? 'var(--success)' : 'white'};
@@ -4785,7 +4785,7 @@
                                                    font-size:12px;font-weight:700;cursor:pointer;
                                                    border:1.5px solid ${taken ? 'var(--success)' : 'var(--border)'};
                                                    transition:all 0.2s;font-family:'Sora',sans-serif;">
-                                        ${taken ? '✅' : '🕐'} ${time}
+                                        ${taken ? '✅' : '🕐'} ${escapeHtml(time)}
                                     </button>
                                 `;
                             }).join('')}
@@ -4890,7 +4890,7 @@
                     <div class="modal-title">⚙️ Customize Hydration Goal</div>
                     
                     <div style="background: var(--bg); padding: 16px; border-radius: 12px; margin-bottom: 20px;">
-                        <div style="font-weight: 600; margin-bottom: 8px;">Current Goal: ${currentGoal} oz/day</div>
+                        <div style="font-weight: 600; margin-bottom: 8px;">Current Goal: ${escapeHtml(currentGoal)} oz/day</div>
                         <div style="font-size: 13px; color: var(--text-light);">
                             ${isCustom ? 'Using custom goal' : 'Auto-calculated based on age and weight'}
                         </div>
@@ -4901,7 +4901,7 @@
                             <input type="radio" name="goalType" value="auto" ${!isCustom ? 'checked' : ''} onchange="toggleCustomGoalInput(false)">
                             <div style="flex: 1;">
                                 <div style="font-weight: 600;">Auto-calculate (Recommended)</div>
-                                <div style="font-size: 12px; color: var(--text-light);">Based on ${child.name}'s age and weight: ${autoCalculated} oz/day</div>
+                                <div style="font-size: 12px; color: var(--text-light);">Based on ${escapeHtml(child.name)}'s age and weight: ${autoCalculated} oz/day</div>
                             </div>
                         </label>
                         
@@ -4917,7 +4917,7 @@
                     <div id="customGoalInput" style="display: ${isCustom ? 'block' : 'none'}; margin-top: 16px;">
                         <div class="input-group">
                             <label class="input-label">Custom Daily Goal (oz)</label>
-                            <input type="number" class="input-field" id="customGoalValue" placeholder="80" min="20" max="200" value="${isCustom ? child.customHydrationGoal : ''}" step="4">
+                            <input type="number" class="input-field" id="customGoalValue" placeholder="80" min="20" max="200" value="${escapeHtml(isCustom ? child.customHydrationGoal : '')}" step="4">
                             <p style="font-size: 11px; color: var(--text-light); margin-top: 4px;">
                                 💡 Typical adult range: 80-100 oz/day (consult your doctor)
                             </p>
@@ -4998,9 +4998,9 @@
             child.symptoms.forEach(symptom => {
                 html += `
                     <div style="background: var(--bg); padding: 16px; border-radius: 12px; margin-bottom: 12px;">
-                        <div style="font-weight: 600; margin-bottom: 4px;">${symptom.type}</div>
-                        <div style="font-size: 13px; color: var(--text-light);">${symptom.date}</div>
-                        <div style="margin-top: 8px;">${symptom.description}</div>
+                        <div style="font-weight: 600; margin-bottom: 4px;">${escapeHtml(symptom.type)}</div>
+                        <div style="font-size: 13px; color: var(--text-light);">${escapeHtml(symptom.date)}</div>
+                        <div style="margin-top: 8px;">${escapeHtml(symptom.description)}</div>
                     </div>
                 `;
             });
@@ -5053,12 +5053,12 @@
                             </div>
                             <div style="font-size:42px;font-weight:800;font-family:'Sora',sans-serif;
                                         letter-spacing:-1px;line-height:1;">
-                                ${latest.weight}
+                                ${escapeHtml(latest.weight)}
                                 <span style="font-size:16px;font-weight:500;opacity:0.7;">lbs</span>
                             </div>
                             <div style="font-size:12px;opacity:0.6;margin-top:4px;">
                                 ${new Date(latest.date).toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'})}
-                                ${latest.context ? ` · ${latest.context}` : ''}
+                                ${latest.context ? ` · ${escapeHtml(latest.context)}` : ''}
                             </div>
                         </div>
                         <div style="text-align:right;">
@@ -5083,7 +5083,7 @@
                         <div>
                             <div style="font-size:11px;opacity:0.7;">Daily hydration goal</div>
                             <div style="font-size:16px;font-weight:800;font-family:'Sora',sans-serif;">
-                                ${hydrationGoal} oz/day
+                                ${escapeHtml(hydrationGoal)} oz/day
                             </div>
                         </div>
                     </div>
@@ -5116,13 +5116,13 @@
                                                               padding:1px 6px;border-radius:10px;margin-left:4px;
                                                               font-weight:700;">LATEST</span>` : ''}
                                 </div>
-                                ${entry.notes ? `<div style="font-size:11px;color:var(--text-light);font-style:italic;margin-top:1px;">${entry.notes}</div>` : ''}
+                                ${entry.notes ? `<div style="font-size:11px;color:var(--text-light);font-style:italic;margin-top:1px;">${escapeHtml(entry.notes)}</div>` : ''}
                             </div>
                             <div style="display:flex;align-items:center;gap:8px;">
                                 ${diff !== null ? `<span style="font-size:11px;color:${dColor};font-weight:700;">${dArrow} ${Math.abs(diff)}</span>` : ''}
                                 <span style="font-weight:800;font-size:15px;font-family:'Sora',sans-serif;
                                              color:${isLatest ? 'var(--primary-dark)' : 'var(--text)'};">
-                                    ${entry.weight} lbs
+                                    ${escapeHtml(entry.weight)} lbs
                                 </span>
                             </div>
                         </div>
@@ -5171,12 +5171,12 @@
                                 </div>
                                 <div style="min-width:0;">
                                     <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                                        <span style="font-weight:800;font-size:14px;font-family:'Sora',sans-serif;">${contact.name}</span>
+                                        <span style="font-weight:800;font-size:14px;font-family:'Sora',sans-serif;">${escapeHtml(contact.name)}</span>
                                         ${contact.isPrimary ? `<span style="font-size:10px;background:var(--primary);color:white;padding:2px 8px;border-radius:20px;font-weight:700;">⭐ PRIMARY</span>` : ''}
                                     </div>
-                                    <div style="font-size:12px;color:var(--text-light);margin-top:2px;">${contact.type}</div>
-                                    ${contact.address ? `<div style="font-size:11px;color:var(--text-light);margin-top:2px;">📍 ${contact.address}</div>` : ''}
-                                    ${contact.notes ? `<div style="font-size:11px;color:var(--text-mid);font-style:italic;margin-top:2px;">${contact.notes}</div>` : ''}
+                                    <div style="font-size:12px;color:var(--text-light);margin-top:2px;">${escapeHtml(contact.type)}</div>
+                                    ${contact.address ? `<div style="font-size:11px;color:var(--text-light);margin-top:2px;">📍 ${escapeHtml(contact.address)}</div>` : ''}
+                                    ${contact.notes ? `<div style="font-size:11px;color:var(--text-mid);font-style:italic;margin-top:2px;">${escapeHtml(contact.notes)}</div>` : ''}
                                 </div>
                             </div>
                             <button data-requires="full" onclick="showAddContact(${contact.id})"
@@ -5189,12 +5189,12 @@
                         <div style="display:flex;gap:8px;">
                             ${contact.phone ? `
                                 <button class="btn btn-primary btn-small" style="flex:1;"
-                                        onclick="window.location.href='tel:${contact.phone}'">📞 Call</button>
+                                        onclick="window.location.href='tel:${jsArg(contact.phone)}'">📞 Call</button>
                                 <button class="btn btn-secondary btn-small" style="flex:1;"
-                                        onclick="window.location.href='sms:${contact.phone}'">💬 Text</button>` : ''}
+                                        onclick="window.location.href='sms:${jsArg(contact.phone)}'">💬 Text</button>` : ''}
                             ${contact.email ? `
                                 <button class="btn btn-secondary btn-small" style="flex:1;"
-                                        onclick="window.location.href='mailto:${contact.email}'">📧 Email</button>` : ''}
+                                        onclick="window.location.href='mailto:${jsArg(contact.email)}'">📧 Email</button>` : ''}
                         </div>
                     </div>
                 `;
@@ -5267,21 +5267,21 @@
                                         display:flex;align-items:center;justify-content:center;
                                         color:white;font-weight:800;font-size:16px;
                                         font-family:'Sora',sans-serif;flex-shrink:0;">
-                                ${post.initials}
+                                ${escapeHtml(post.initials)}
                             </div>
                             <div style="flex:1;min-width:0;">
                                 <div style="font-weight:700;font-size:14px;
                                             font-family:'Sora',sans-serif;color:var(--text);">
-                                    ${post.author}
+                                    ${escapeHtml(post.author)}
                                 </div>
                                 <div style="font-size:11px;color:var(--text-light);margin-top:1px;">
-                                    ${post.role} · ${post.time}
+                                    ${escapeHtml(post.role)} · ${escapeHtml(post.time)}
                                 </div>
                             </div>
                         </div>
                         <div style="font-size:14px;line-height:1.7;color:var(--text-mid);
                                     margin-bottom:12px;">
-                            ${post.content}
+                            ${escapeHtml(post.content)}
                         </div>
                         <div style="display:flex;align-items:center;gap:16px;">
                             <div style="font-size:13px;color:var(--text-light);
@@ -5343,7 +5343,7 @@
                     <div style="background:linear-gradient(135deg,#0f0f14,#1e1040);
                                 padding:20px 24px;display:flex;justify-content:space-between;align-items:center;">
                         <div>
-                            <div style="color:rgba(14,168,154,0.8);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;">${child.name}</div>
+                            <div style="color:rgba(14,168,154,0.8);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;">${escapeHtml(child.name)}</div>
                             <div style="color:white;font-size:18px;font-weight:800;font-family:'Sora',sans-serif;">Add Medication</div>
                         </div>
                         <button class="modal-close" onclick="this.closest('.modal').remove()" style="color:white;background:rgba(255,255,255,0.1);">×</button>
@@ -5617,12 +5617,12 @@
                         <div>
                             <div style="color:rgba(14,168,154,0.8);font-size:11px;font-weight:700;
                                         letter-spacing:.1em;text-transform:uppercase;">
-                                ${child.selfTracking ? 'My Weight' : child.name + "'s Weight"}
+                                ${child.selfTracking ? 'My Weight' : escapeHtml(child.name) + "'s Weight"}
                             </div>
                             <div style="color:white;font-size:18px;font-weight:800;
                                         font-family:'Sora',sans-serif;">Log Weight</div>
                             ${lastEntry ? `<div style="color:rgba(255,255,255,0.5);font-size:12px;margin-top:2px;">
-                                Last: ${lastEntry.weight} lbs · ${trendHTML}
+                                Last: ${escapeHtml(lastEntry.weight)} lbs · ${trendHTML}
                             </div>` : ''}
                         </div>
                         <button class="modal-close" onclick="this.closest('.modal').remove()"
@@ -5639,7 +5639,7 @@
                             </div>
                             <div style="display:flex;align-items:center;justify-content:center;gap:8px;">
                                 <input type="number" id="newWeight"
-                                       value="${currentWeight}"
+                                       value="${escapeHtml(currentWeight)}"
                                        min="5" max="700" step="0.1"
                                        placeholder="0.0"
                                        style="width:130px;font-size:48px;font-weight:800;
@@ -5742,7 +5742,7 @@
                                         <div style="display:flex;align-items:center;gap:8px;">
                                             ${diff !== null ? `<span style="font-size:11px;color:${color};font-weight:700;">${arrow} ${Math.abs(diff)}</span>` : ''}
                                             <span style="font-weight:800;font-size:15px;font-family:'Sora',sans-serif;">
-                                                ${entry.weight} lbs
+                                                ${escapeHtml(entry.weight)} lbs
                                             </span>
                                             <button data-requires="full" onclick="deleteWeightEntry('${entry.timestamp}')"
                                                     style="background:none;border:none;color:var(--text-light);
@@ -5950,7 +5950,7 @@
                     <div style="font-size:14px;margin-top:8px;">
                         <strong>Last screen:</strong> ${lastDate ? new Date(lastDate).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : 'Not recorded'}
                     </div>
-                    ${result ? `<div style="font-size:14px;margin-top:4px;"><strong>Result:</strong> ${result.charAt(0).toUpperCase() + result.slice(1)}</div>` : ''}
+                    ${result ? `<div style="font-size:14px;margin-top:4px;"><strong>Result:</strong> ${escapeHtml(result.charAt(0).toUpperCase() + result.slice(1))}</div>` : ''}
                     ${nextDueHTML}
                 </div>`;
         }
@@ -6057,31 +6057,31 @@
                         <div class="input-group">
                             <label class="input-label">Name *</label>
                             <input type="text" class="input-field" id="contactName"
-                                   placeholder="Contact name" value="${existing ? existing.name : ''}">
+                                   placeholder="Contact name" value="${escapeHtml(existing ? existing.name : '')}">
                         </div>
 
                         <div class="input-group">
                             <label class="input-label">Phone Number *</label>
                             <input type="tel" class="input-field" id="contactPhone"
-                                   placeholder="(123) 456-7890" value="${existing ? existing.phone || '' : ''}">
+                                   placeholder="(123) 456-7890" value="${escapeHtml(existing ? existing.phone || '' : '')}">
                         </div>
 
                         <div class="input-group">
                             <label class="input-label">Email (Optional)</label>
                             <input type="email" class="input-field" id="contactEmail"
-                                   placeholder="email@example.com" value="${existing ? existing.email || '' : ''}">
+                                   placeholder="email@example.com" value="${escapeHtml(existing ? existing.email || '' : '')}">
                         </div>
 
                         <div class="input-group">
                             <label class="input-label">Address (Optional)</label>
                             <input type="text" class="input-field" id="contactAddress"
-                                   placeholder="Office / hospital address" value="${existing ? existing.address || '' : ''}">
+                                   placeholder="Office / hospital address" value="${escapeHtml(existing ? existing.address || '' : '')}">
                         </div>
 
                         <div class="input-group">
                             <label class="input-label">Notes (Optional)</label>
                             <textarea class="input-field" id="contactNotes" rows="2"
-                                      placeholder="Available weekdays, after-hours line, etc.">${existing ? existing.notes || '' : ''}</textarea>
+                                      placeholder="Available weekdays, after-hours line, etc.">${escapeHtml(existing ? existing.notes || '' : '')}</textarea>
                         </div>
 
                         <!-- Primary contact toggle -->
@@ -6264,7 +6264,7 @@
             modal.innerHTML = `
                 <div class="modal-content" style="max-width: 460px;">
                     <button class="modal-close" onclick="this.closest('.modal').remove()">×</button>
-                    <div class="modal-title">Change ${child.name}'s Icon</div>
+                    <div class="modal-title">Change ${escapeHtml(child.name)}'s Icon</div>
 
                     <!-- Photo Upload Section -->
                     <div style="margin-bottom: 20px;">
@@ -6275,7 +6275,7 @@
                                  onmouseout="this.style.borderColor='var(--border)';this.style.background='var(--bg)'">
                                 <div id="photoPreview" style="margin-bottom: 8px;">
                                     ${child.photo 
-                                        ? `<img src="${child.photo}" style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:3px solid var(--primary);">` 
+                                        ? `<img src="${escapeHtml(child.photo)}" style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:3px solid var(--primary);">` 
                                         : '<div style="font-size:40px;">📷</div>'}
                                 </div>
                                 <div style="font-size: 13px; color: var(--text-light); font-weight: 500;">
@@ -6359,7 +6359,7 @@
                 // Update preview in modal
                 const preview = document.getElementById('photoPreview');
                 if (preview) {
-                    preview.innerHTML = `<img src="${e.target.result}" style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:3px solid var(--primary);">`;
+                    preview.innerHTML = `<img src="${escapeHtml(e.target.result)}" style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:3px solid var(--primary);">`;
                 }
 
                 // Close modal and confirm
@@ -6401,11 +6401,11 @@
             if (!avatar) return;
 
             if (child.photo) {
-                avatar.innerHTML = `<img src="${child.photo}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`;
+                avatar.innerHTML = `<img src="${escapeHtml(child.photo)}" style="width:100%;height:100%;border-radius:50%;object-fit:cover;">`;
                 avatar.style.padding = '0';
                 avatar.style.overflow = 'hidden';
             } else {
-                avatar.innerHTML = child.emoji || '👧🏾';
+                avatar.innerHTML = escapeHtml(child.emoji || '👧🏾');
                 avatar.style.padding = '';
                 avatar.style.overflow = '';
             }
@@ -6425,11 +6425,11 @@
                     <div style="background: var(--bg); border-radius: 16px; padding: 16px; margin-bottom: 16px; display: flex; align-items: center; gap: 16px;">
                         <div style="width:56px;height:56px;border-radius:50%;background:white;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:28px;overflow:hidden;flex-shrink:0;">
                             ${child.photo 
-                                ? `<img src="${child.photo}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">` 
-                                : (child.emoji || '👧🏾')}
+                                ? `<img src="${escapeHtml(child.photo)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">`
+                                : escapeHtml(child.emoji || '👧🏾')}
                         </div>
                         <div style="flex:1;">
-                            <div style="font-weight:700;font-size:15px;font-family:'Sora',sans-serif;">${child.name}'s Icon</div>
+                            <div style="font-weight:700;font-size:15px;font-family:'Sora',sans-serif;">${escapeHtml(child.name)}'s Icon</div>
                             <div style="font-size:12px;color:var(--text-light);margin-top:2px;">Emoji or photo from your phone</div>
                         </div>
                         <button class="btn btn-secondary btn-small" onclick="this.closest('.modal').remove(); changeChildIcon();">Change</button>
@@ -6448,12 +6448,12 @@
                     
                     <div class="input-group">
                         <label class="input-label">Parent Name</label>
-                        <input type="text" class="input-field" id="settingsParentName" value="${appData.parentName || ''}" placeholder="Your name">
+                        <input type="text" class="input-field" id="settingsParentName" value="${escapeHtml(appData.parentName || '')}" placeholder="Your name">
                     </div>
                     
                     <div class="input-group">
                         <label class="input-label">Relationship to Children</label>
-                        <input type="text" class="input-field" id="settingsParentRelation" value="${appData.parentRelation || ''}" placeholder="e.g., Mother, Father, Guardian">
+                        <input type="text" class="input-field" id="settingsParentRelation" value="${escapeHtml(appData.parentRelation || '')}" placeholder="e.g., Mother, Father, Guardian">
                     </div>
                     
                     <button class="btn btn-primary btn-full" style="margin-bottom: 10px;" onclick="saveSettings()">Save Changes</button>
@@ -6528,7 +6528,7 @@
                         <div class="report-section-title">Patient Profile</div>
                         <div class="report-row">
                             <span class="report-label">Name</span>
-                            <span class="report-value">${child.name}</span>
+                            <span class="report-value">${escapeHtml(child.name)}</span>
                         </div>
                         <div class="report-row">
                             <span class="report-label">Date of Birth</span>
@@ -6540,11 +6540,11 @@
                         </div>
                         <div class="report-row">
                             <span class="report-label">Disease Type</span>
-                            <span class="report-value">${child.diseaseType || 'Not specified'}</span>
+                            <span class="report-value">${escapeHtml(child.diseaseType || 'Not specified')}</span>
                         </div>
                         <div class="report-row">
                             <span class="report-label">Weight</span>
-                            <span class="report-value">${child.weight ? child.weight + ' lbs' : 'Not recorded'}</span>
+                            <span class="report-value">${escapeHtml(child.weight ? child.weight + ' lbs' : 'Not recorded')}</span>
                         </div>
                         <div class="report-row">
                             <span class="report-label">Report Generated</span>
@@ -6573,11 +6573,11 @@
                                     <div style="background:var(--bg);border-radius:10px;padding:10px 12px;margin-bottom:6px;">
                                         <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
                                             <span style="font-size:12px;font-weight:700;font-family:'Sora',sans-serif;">${new Date(log.startTime).toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span>
-                                            <span style="font-size:12px;font-weight:700;color:${log.level >= 4 ? 'var(--emergency)' : log.level >= 3 ? 'var(--warning)' : 'var(--success)'};">Severity ${log.level}/5</span>
+                                            <span style="font-size:12px;font-weight:700;color:${log.level >= 4 ? 'var(--emergency)' : log.level >= 3 ? 'var(--warning)' : 'var(--success)'};">Severity ${escapeHtml(log.level)}/5</span>
                                         </div>
                                         ${(log.location || '').split(', ').filter(Boolean).length > 0
-                                            ? `<div style="margin-bottom:4px;">${(log.location || '').split(', ').filter(Boolean).map(loc => `<span class="pain-chip">${loc}</span>`).join('')}</div>` : ''}
-                                        ${log.helped && log.helped.length > 0 ? `<div style="font-size:11px;color:var(--text-light);">Helped: ${log.helped.join(', ')}</div>` : ''}
+                                            ? `<div style="margin-bottom:4px;">${(log.location || '').split(', ').filter(Boolean).map(loc => `<span class="pain-chip">${escapeHtml(loc)}</span>`).join('')}</div>` : ''}
+                                        ${log.helped && log.helped.length > 0 ? `<div style="font-size:11px;color:var(--text-light);">Helped: ${log.helped.map(escapeHtml).join(', ')}</div>` : ''}
                                     </div>
                                 `).join('')}
                                 ${painLogs.length > 8 ? `<div style="font-size:12px;color:var(--text-light);text-align:center;padding:4px;">+ ${painLogs.length - 8} more episodes in full export</div>` : ''}
@@ -6625,8 +6625,8 @@
                             : meds.map(med => `
                                 <div class="report-row">
                                     <div>
-                                        <div style="font-weight:700;font-size:13px;font-family:'Sora',sans-serif;">${med.name} ${med.critical || med.isCritical ? '⚠️' : ''}</div>
-                                        <div style="font-size:11px;color:var(--text-light);">${med.dose || ''} · ${Array.isArray(med.times) ? med.times.join(', ') : (med.time || 'As prescribed')}</div>
+                                        <div style="font-weight:700;font-size:13px;font-family:'Sora',sans-serif;">${escapeHtml(med.name)} ${med.critical || med.isCritical ? '⚠️' : ''}</div>
+                                        <div style="font-size:11px;color:var(--text-light);">${escapeHtml(med.dose || '')} · ${escapeHtml(Array.isArray(med.times) ? med.times.join(', ') : (med.time || 'As prescribed'))}</div>
                                     </div>
                                     <span style="font-size:11px;background:var(--success-light);color:var(--success);padding:2px 8px;border-radius:20px;font-weight:600;">Active</span>
                                 </div>
@@ -6640,10 +6640,10 @@
                             : contacts.slice(0,4).map(c => `
                                 <div class="report-row">
                                     <div>
-                                        <div style="font-weight:700;font-size:13px;font-family:'Sora',sans-serif;">${c.name}</div>
-                                        <div style="font-size:11px;color:var(--text-light);">${c.type || 'Contact'}</div>
+                                        <div style="font-weight:700;font-size:13px;font-family:'Sora',sans-serif;">${escapeHtml(c.name)}</div>
+                                        <div style="font-size:11px;color:var(--text-light);">${escapeHtml(c.type || 'Contact')}</div>
                                     </div>
-                                    <div style="text-align:right;font-size:12px;color:var(--text-mid);">${c.phone || c.email || ''}</div>
+                                    <div style="text-align:right;font-size:12px;color:var(--text-mid);">${escapeHtml(c.phone || c.email || '')}</div>
                                 </div>
                             `).join('')
                         }
@@ -6811,7 +6811,7 @@
                         <div class="report-section-title">Student</div>
                         <div class="report-row">
                             <span class="report-label">Name</span>
-                            <span class="report-value">${child.name}</span>
+                            <span class="report-value">${escapeHtml(child.name)}</span>
                         </div>
                         <div class="report-row">
                             <span class="report-label">Date of Birth</span>
@@ -6823,11 +6823,11 @@
                         </div>
                         <div class="report-row">
                             <span class="report-label">Condition</span>
-                            <span class="report-value">${child.diseaseType || 'Not specified'} (Sickle Cell Disease)</span>
+                            <span class="report-value">${escapeHtml(child.diseaseType || 'Not specified')} (Sickle Cell Disease)</span>
                         </div>
                         <div class="report-row">
                             <span class="report-label">Weight</span>
-                            <span class="report-value">${child.weight ? child.weight + ' lbs' : 'Not recorded'}</span>
+                            <span class="report-value">${escapeHtml(child.weight ? child.weight + ' lbs' : 'Not recorded')}</span>
                         </div>
 
                         <!-- 2. Emergency Action Plan -->
@@ -6857,8 +6857,8 @@
                                 return `
                                 <div class="report-row">
                                     <div>
-                                        <div style="font-weight:700;font-size:13px;font-family:'Sora',sans-serif;">${med.name}</div>
-                                        <div style="font-size:11px;color:var(--text-light);">${med.dose || ''} · ${times}</div>
+                                        <div style="font-weight:700;font-size:13px;font-family:'Sora',sans-serif;">${escapeHtml(med.name)}</div>
+                                        <div style="font-size:11px;color:var(--text-light);">${escapeHtml(med.dose || '')} · ${escapeHtml(times)}</div>
                                     </div>
                                     ${schoolHours
                                         ? `<span style="font-size:11px;background:var(--warning-light,#FFF4E0);color:var(--warning,#b45309);padding:3px 9px;border-radius:20px;font-weight:700;white-space:nowrap;">⏰ During school hours</span>`
@@ -6870,7 +6870,7 @@
                         <!-- 4. Hydration -->
                         <div class="report-section-title">Hydration</div>
                         <div style="font-size:13px;padding:8px 0;color:var(--text-mid);">
-                            💧 Please allow water access throughout the day — goal: ${child.hydrationGoal || 48} oz/day.
+                            💧 Please allow water access throughout the day — goal: ${escapeHtml(child.hydrationGoal || 48)} oz/day.
                         </div>
 
                         <!-- 5. Stroke Screen (if applicable) — same gating as Health-tab tracker -->
@@ -6887,10 +6887,10 @@
                             : contacts.map(c => `
                                 <div class="report-row">
                                     <div>
-                                        <div style="font-weight:700;font-size:13px;font-family:'Sora',sans-serif;">${c.name}${c.isPrimary ? ' ⭐' : ''}</div>
-                                        <div style="font-size:11px;color:var(--text-light);">${c.type || 'Contact'}</div>
+                                        <div style="font-weight:700;font-size:13px;font-family:'Sora',sans-serif;">${escapeHtml(c.name)}${c.isPrimary ? ' ⭐' : ''}</div>
+                                        <div style="font-size:11px;color:var(--text-light);">${escapeHtml(c.type || 'Contact')}</div>
                                     </div>
-                                    <div style="text-align:right;font-size:12px;color:var(--text-mid);">${c.phone || ''}</div>
+                                    <div style="text-align:right;font-size:12px;color:var(--text-mid);">${escapeHtml(c.phone || '')}</div>
                                 </div>
                             `).join('')
                         }
@@ -7586,6 +7586,25 @@
             return String(value ?? '').replace(/[&<>"']/g, ch => ({
                 '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
             })[ch]);
+        }
+
+        // For a value dropped inside a quoted JS string that itself sits inside
+        // an inline handler or href — onclick="fn('${jsArg(v)}')",
+        // href='tel:${jsArg(v)}'. Two parsers read it in sequence: the HTML
+        // attribute parser first, then JS. escapeHtml is wrong here — the HTML
+        // layer decodes &#39; back to a real quote before JS runs, so the value
+        // still breaks out of the string. Hex-escaping every character outside a
+        // conservative whitelist is safe against both layers: the escapes carry
+        // no HTML-special or JS-special characters, and JS decodes \xHH / \uHHHH
+        // back to the original when the string is finally used (so a tel: number
+        // with parentheses still dials correctly).
+        function jsArg(value) {
+            return String(value ?? '').replace(/[^a-zA-Z0-9 @.:_+-]/g, ch => {
+                const code = ch.charCodeAt(0);
+                return code < 256
+                    ? '\\x' + code.toString(16).padStart(2, '0')
+                    : '\\u' + code.toString(16).padStart(4, '0');
+            });
         }
 
         // Codes get copied out of texts and emails, so they arrive with stray
@@ -9210,7 +9229,7 @@
                                 padding:20px 24px;display:flex;justify-content:space-between;align-items:center;">
                         <div>
                             <div style="color:rgba(14,168,154,0.8);font-size:11px;font-weight:700;
-                                        letter-spacing:.1em;text-transform:uppercase;">${child.name}</div>
+                                        letter-spacing:.1em;text-transform:uppercase;">${escapeHtml(child.name)}</div>
                             <div style="color:white;font-size:18px;font-weight:800;
                                         font-family:'Sora',sans-serif;">Edit Medication</div>
                         </div>
@@ -9222,12 +9241,12 @@
 
                         <div class="input-group">
                             <label class="input-label">Medication Name</label>
-                            <input type="text" class="input-field" id="editMedName" value="${med.name}">
+                            <input type="text" class="input-field" id="editMedName" value="${escapeHtml(med.name)}">
                         </div>
 
                         <div class="input-group">
                             <label class="input-label">Dosage</label>
-                            <input type="text" class="input-field" id="editMedDose" value="${med.dose || ''}">
+                            <input type="text" class="input-field" id="editMedDose" value="${escapeHtml(med.dose || '')}">
                         </div>
 
                         <div class="input-group">
@@ -9273,24 +9292,24 @@
                             <div class="input-group" style="margin-bottom:10px;">
                                 <label class="input-label">Prescribing Doctor</label>
                                 <input type="text" class="input-field" id="editMedDoctor"
-                                       value="${med.doctor||''}" placeholder="Dr. name" style="font-size:13px;">
+                                       value="${escapeHtml(med.doctor||'')}" placeholder="Dr. name" style="font-size:13px;">
                             </div>
                             <div class="input-group" style="margin-bottom:10px;">
                                 <label class="input-label">Pharmacy</label>
                                 <input type="text" class="input-field" id="editMedPharmacy"
-                                       value="${med.pharmacy||''}" placeholder="Pharmacy name" style="font-size:13px;">
+                                       value="${escapeHtml(med.pharmacy||'')}" placeholder="Pharmacy name" style="font-size:13px;">
                             </div>
                             <div class="input-group" style="margin-bottom:0;">
                                 <label class="input-label">Refill Date</label>
                                 <input type="date" class="input-field" id="editMedRefillDate"
-                                       value="${med.refillDate||''}" style="font-size:13px;">
+                                       value="${escapeHtml(med.refillDate||'')}" style="font-size:13px;">
                             </div>
                         </div>
 
                         <div class="input-group">
                             <label class="input-label">Special Instructions</label>
                             <textarea class="input-field" id="editMedInstructions" rows="2"
-                                      placeholder="Take with food, give with water, etc.">${med.instructions||med.notes||''}</textarea>
+                                      placeholder="Take with food, give with water, etc.">${escapeHtml(med.instructions||med.notes||'')}</textarea>
                         </div>
                     </div>
 
