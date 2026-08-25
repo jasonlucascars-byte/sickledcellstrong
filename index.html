@@ -1928,6 +1928,12 @@
                     <button class="btn btn-primary btn-full" style="margin-top:8px;" onclick="handleLogin()">
                         Sign In 💙
                     </button>
+                    <button type="button" onclick="handleForgotPassword()"
+                        style="width:100%;margin-top:10px;background:none;border:none;
+                               font-size:13px;color:var(--primary);cursor:pointer;
+                               font-family:'DM Sans',sans-serif;text-decoration:underline;">
+                        Forgot your password?
+                    </button>
                     <div class="auth-divider">or join a household</div>
                     <div class="input-group">
                         <label class="input-label">Household Code</label>
@@ -3796,12 +3802,15 @@
 
         function previewSymptomPhoto(input) {
             if (!input.files || !input.files[0]) return;
-            const reader = new FileReader();
-            reader.onload = function(e) {
+            // Same downscale as the profile photo. Symptom photos accumulate —
+            // one per logged symptom — so they are the fastest way to fill
+            // storage and were the original cause of saves failing outright.
+            compressImageFile(input.files[0]).then((photo) => {
+                if (!photo) return;
                 const preview = document.getElementById('symptomPhotoPreview');
                 if (preview) {
                     preview.innerHTML = `
-                        <img src="${escapeHtml(e.target.result)}"
+                        <img src="${escapeHtml(photo)}"
                              style="width:100%;max-height:200px;object-fit:cover;
                                     border-radius:12px;display:block;">
                         <div style="font-size:12px;color:var(--primary);font-weight:600;
@@ -3812,9 +3821,8 @@
                     preview.style.borderColor = 'var(--primary)';
                 }
                 // Store photo data on input for retrieval
-                input.photoData = e.target.result;
-            };
-            reader.readAsDataURL(input.files[0]);
+                input.photoData = photo;
+            });
         }
 
         function saveSymptomLog() {
@@ -4636,8 +4644,69 @@
         }
 
         // Data Management
+        // Never throws. Callers save locally and then fire a cloud write on the
+        // next line — if this threw (it did, on QuotaExceededError), that cloud
+        // write never ran, so a full device silently lost the entry in *both*
+        // places. A pain crisis logged during a full-storage state is exactly
+        // the record a family cannot afford to lose, so a local failure must
+        // still let the cloud copy through. Returns false so callers can tell.
         function saveData() {
-            localStorage.setItem('sickleStrongData', JSON.stringify(appData));
+            try {
+                localStorage.setItem('sickleStrongData', JSON.stringify(appData));
+                return true;
+            } catch (err) {
+                console.warn('[SickleStrong] local save failed', err);
+                // Quota is the case that actually happens (photos are the bulk
+                // of the payload). Anything else here is a browser storage
+                // failure — private mode, disabled storage — and reads the same
+                // to a parent: it didn't save on this device.
+                showToast(
+                    "This device is out of storage, so that didn't save here. " +
+                    (familyAuth.isLoggedIn
+                        ? "It's still being saved to your account."
+                        : "Create an account to keep your records safely backed up."),
+                    'warning'
+                );
+                return false;
+            }
+        }
+
+        // Phone cameras produce 3-8 MB photos; localStorage caps out around 5 MB
+        // for everything the app stores. Two full-size photos used to fill it and
+        // then every later save failed. Downscaling to a long edge of 1024 and
+        // re-encoding as JPEG brings a photo to roughly 100-200 KB, which is
+        // still clear enough for a clinician to look at a swollen hand or a rash.
+        // Falls back to the original data URL if anything about the decode fails
+        // — a slightly-too-big photo beats losing the photo.
+        function compressImageFile(file, maxEdge = 1024, quality = 0.75) {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onerror = () => resolve(null);
+                reader.onload = (e) => {
+                    const original = e.target.result;
+                    const img = new Image();
+                    img.onerror = () => resolve(original);
+                    img.onload = () => {
+                        try {
+                            const scale = Math.min(1, maxEdge / Math.max(img.width, img.height));
+                            const canvas = document.createElement('canvas');
+                            canvas.width = Math.round(img.width * scale);
+                            canvas.height = Math.round(img.height * scale);
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                            const out = canvas.toDataURL('image/jpeg', quality);
+                            // A tiny source can encode larger as JPEG than it
+                            // arrived; keep whichever is actually smaller.
+                            resolve(out.length < original.length ? out : original);
+                        } catch (err) {
+                            console.warn('[SickleStrong] image compression failed', err);
+                            resolve(original);
+                        }
+                    };
+                    img.src = original;
+                };
+                reader.readAsDataURL(file);
+            });
         }
 
         function loadData() {
@@ -6347,11 +6416,11 @@
             const child = getCurrentChild();
             if (!child || !input.files || !input.files[0]) return;
 
-            const file = input.files[0];
-            const reader = new FileReader();
-
-            reader.onload = function(e) {
-                child.photo = e.target.result;
+            // Downscaled before it is stored: a raw camera photo is larger than
+            // the entire localStorage budget this app has to work with.
+            compressImageFile(input.files[0]).then((photo) => {
+                if (!photo) return;
+                child.photo = photo;
                 child.emoji = null; // Clear emoji when photo is set
                 saveData();
                 updateUI();
@@ -6359,7 +6428,7 @@
                 // Update preview in modal
                 const preview = document.getElementById('photoPreview');
                 if (preview) {
-                    preview.innerHTML = `<img src="${escapeHtml(e.target.result)}" style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:3px solid var(--primary);">`;
+                    preview.innerHTML = `<img src="${escapeHtml(photo)}" style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:3px solid var(--primary);">`;
                 }
 
                 // Close modal and confirm
@@ -6367,9 +6436,7 @@
                     document.getElementById('changeIconModal')?.remove();
                     updateChildAvatarDisplay();
                 }, 600);
-            };
-
-            reader.readAsDataURL(file);
+            });
         }
 
         function removeChildPhoto() {
@@ -7990,6 +8057,63 @@
             document.getElementById('signupForm').style.display = tab === 'signup' ? 'block' : 'none';
         }
 
+        // Without this a parent who forgets their password loses their child's
+        // entire history: the records are in the cloud but nothing can reach
+        // them again, and clearing the browser takes the local copy too.
+        async function handleForgotPassword() {
+            const email = document.getElementById('loginEmail').value.trim();
+            if (!/^\S+@\S+\.\S+$/.test(email)) {
+                alert("Enter the email address for your account in the box above, then tap 'Forgot your password?' again.\n\nWe'll send a reset link to it.");
+                return;
+            }
+            if (cloudIsOffline()) {
+                alert("You appear to be offline.\n\nConnect to the internet and try again — resetting a password needs a connection.");
+                return;
+            }
+
+            // redirectTo must be APP_URL, not location.origin: families open the
+            // app from Netlify preview URLs and installed shortcuts, and a link
+            // back to one of those would land them somewhere that isn't their app.
+            const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: APP_URL });
+
+            // Deliberately the same message whether or not the address has an
+            // account — telling a stranger which emails are registered would
+            // leak which families use the app.
+            if (error) console.warn('[SickleStrong] password reset failed', error);
+            alert(`If ${email} has a SickleStrong account, a reset link is on its way. 💙\n\nOpen it on this device, choose a new password, then come back and sign in.\n\nIt can take a minute to arrive — check your spam folder too.`);
+        }
+
+        // Arriving back from the reset email. Supabase puts the user in a
+        // recovery session, so the new password is set with updateUser. Detected
+        // from the URL fragment, which is why it runs before the normal boot
+        // paths decide what to show.
+        async function handlePasswordRecovery() {
+            const hash = String(location.hash || '');
+            if (!hash.includes('type=recovery')) return false;
+
+            // Clear the fragment so a refresh can't replay it and so the tokens
+            // don't sit in the address bar.
+            history.replaceState(null, '', location.pathname + location.search);
+
+            const next = prompt('Choose a new password for your SickleStrong account (at least 8 characters):');
+            if (!next) {
+                alert("No problem — your password hasn't changed.\n\nYou can tap 'Forgot your password?' again whenever you're ready.");
+                return true;
+            }
+            if (next.length < 8) {
+                alert('That password is too short.\n\nPasswords need at least 8 characters. Tap "Forgot your password?" to get a fresh link.');
+                return true;
+            }
+
+            const { error } = await sb.auth.updateUser({ password: next });
+            if (error) {
+                alert(`We couldn't set that password.\n\n${error.message}\n\nReset links expire after a while — request a fresh one and try again.`);
+                return true;
+            }
+            alert('Your password is updated. 💙\n\nYou\'re signed in now — your records are right where you left them.');
+            return true;
+        }
+
         async function handleLogin() {
             const email = document.getElementById('loginEmail').value.trim();
             const password = document.getElementById('loginPassword').value;
@@ -9509,6 +9633,15 @@
             // An invite link (?invite=INV-XXXXXXXX) is the main way people are
             // added to a child, so it's read before anything else decides what
             // to show — it changes whether we open the wizard or a join prompt.
+            // Runs before anything else reads the URL: arriving from a password
+            // reset email is its own flow, and the recovery session it creates
+            // would otherwise be treated as an ordinary sign-in.
+            try {
+                await handlePasswordRecovery();
+            } catch (err) {
+                console.warn('[SickleStrong] password recovery failed', err);
+            }
+
             const pendingInvite = readInviteFromUrl();
 
             // The join code is always read — and therefore always stripped from
