@@ -31,15 +31,16 @@ any push to `main` as a release.
 # Syntax-check the app (there is no linter or compiler)
 python3 -c "import re;open('/tmp/c.js','w').write(re.search(r'<script>(.*?)</script>', open('index.html').read(), re.S).group(1))" && node --check /tmp/c.js
 
-# Run the test suite (requires Playwright + a Chromium build)
-node tests/xss-escaping.test.mjs
+# Run the test suites (require Playwright + a Chromium build)
+node tests/xss-escaping.test.mjs        # 14 checks — render-site escaping
+node tests/storage-resilience.test.mjs  # 11 checks — photo size + save failure
 ```
 
 Tests are plain `.mjs` scripts run directly by Node — there is no test runner,
 so there is no "run a single test" flag. Each file is one suite; run the file.
-The suite drives the real `index.html` over `file://` with the Supabase CDN
-stubbed, so it needs no server and no network. Chromium is located via
-`PW_CHROMIUM`, defaulting to `/opt/pw-browsers/chromium`.
+Both drive the real `index.html` over `file://` with the Supabase CDN stubbed,
+so they need no server and no network. Chromium is located via `PW_CHROMIUM`,
+defaulting to `/opt/pw-browsers/chromium`.
 
 **Bump `CACHE_VERSION` in `sw.js` when shipping changes** that must reach
 already-installed clients — the service worker is network-first for app files
@@ -69,6 +70,18 @@ copy didn't save.
 Other `localStorage` keys: `ss_auth` (session mirror), `ss_auth_dismissed`
 (suppresses the account prompt), `ss_install_dismissed`, and `ss_accounts` — a
 **read-only legacy** pre-Supabase account store; nothing writes it.
+
+Two storage invariants, both fixing real data loss — don't undo either:
+
+- **`saveData()` must never throw.** It catches, warns via `showToast`, and
+  returns `false`. Callers save locally then fire the cloud write on the *next*
+  line, so a throw here means the cloud write never runs and the entry is lost
+  in both places. That entry is typically a pain crisis.
+- **Photos go through `compressImageFile()` before storage.** A raw camera
+  photo is 3–8 MB against a ~5 MB budget; two of them used to fill storage and
+  break every later save. Never store a `readAsDataURL` result directly.
+
+`tests/storage-resilience.test.mjs` pins both.
 
 ### Access model — read this before touching sharing
 
@@ -103,8 +116,15 @@ least-trusted helpers — it allows logging pain and temperature and nothing els
 (`provision_current_user`, `redeem_child_invite`, `generate_child_invite`,
 `lookup_family_by_code`, `switch_household`, `set_child_active_status`,
 `delete_child_permanently`, `cancel_child_invite`) and all RLS policies live in
-Supabase and are **not in this repository**. There are no migrations in git. Do
-not attempt schema changes; assume the live database already provides them.
+Supabase. There are **no migrations in git**. Do not attempt schema changes;
+assume the live database already provides them.
+
+`db/security-model.sql` is a **generated, read-only snapshot** of those policies
+and RPCs — a review artifact so the rules can be diffed alongside the frontend
+that depends on them. It is **not a migration; never run it.** Regenerate it
+with `db/dump-security-model.sql` after any policy change and commit the result,
+so a rule that changes without a commit shows up as a diff. `db/README.md`
+records the open items found auditing it.
 
 Provisioning is centralized in `ensureUserProvisioned()` because signup with
 email confirmation returns **no session** — the user may confirm on a different
