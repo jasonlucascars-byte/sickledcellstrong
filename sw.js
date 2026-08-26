@@ -3,11 +3,15 @@
 // Enables offline access + installability
 // ============================================================
 // Bump this version with every deploy to force cache refresh:
-const CACHE_VERSION = 'sicklestrong-v2';
+const CACHE_VERSION = 'sicklestrong-v3';
 
 const APP_SHELL = [
   '/',
   '/index.html',
+  // The app is no longer inline in index.html. Without this entry an installed
+  // app would open offline to nothing but the boot splash, since the document
+  // caches fine and then waits forever for a script that never arrives.
+  '/app.js',
   '/manifest.json',
   '/icon-192.png',
   '/icon-512.png',
