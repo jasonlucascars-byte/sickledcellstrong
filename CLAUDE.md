@@ -160,13 +160,17 @@ hex-escapes against both layers. Neither helper neutralizes a `javascript:`
 scheme — if a user value ever needs to reach an `href`/URL position, validate
 the scheme instead of escaping.
 
-`tests/xss-escaping.test.mjs` covers the escaping rules above — hostile values
-in every user field, across 14 render paths, plus the inverse guard that the
-exports stay raw. It does **not** assert scheme validation: no user value
-currently reaches an `href`/URL position, so there is no such code path to
-test. If one is ever added, that test has to be written alongside it — the
-suite passing is not evidence the scheme is safe. Run it after touching any
-render function.
+`tests/xss-escaping.test.mjs` seeds hostile values into the child, pain,
+temperature, symptom, medication, weight, note and contact fields and drives 14
+render paths, asserting nothing parses into a live DOM node. Its inverse guard
+covers **`downloadDoctorReport` and `downloadSchoolCareSheet` only** —
+`exportNotes` and `exportAllData` follow the same stay-raw rule but are not
+asserted, so a double-escape regression there would not be caught.
+
+It also does **not** assert scheme validation: no user value currently reaches
+an `href`/URL position, so there is no such code path to test. If one is ever
+added, that test has to be written alongside it — the suite passing is not
+evidence the scheme is safe. Run it after touching any render function.
 
 ## Conventions
 
