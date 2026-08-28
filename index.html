@@ -1200,20 +1200,39 @@
             padding: 9px 0; border-top: 1px dashed var(--border);
         }
 
+        /* Not built yet. Styled as a muted note rather than in the primary
+           colour, because the earlier version showed a real-looking URL in
+           teal and read as a working feature — a parent could have shown that
+           screen to a clinician believing the link would open something. */
         .share-token-box {
-            background: var(--primary-faint);
-            border: 1.5px dashed var(--primary);
+            background: var(--bg);
+            border: 1px solid var(--border);
             border-radius: 14px;
-            padding: 14px;
-            text-align: center;
+            padding: 12px 14px;
             margin-top: 12px;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
         }
-        .share-token-url {
+        .share-token-title {
             font-size: 12px;
-            color: var(--primary-dark);
-            word-break: break-all;
-            font-family: monospace;
-            margin: 6px 0;
+            font-weight: 700;
+            color: var(--text-mid);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .share-token-soon {
+            font-size: 10px;
+            font-weight: 700;
+            letter-spacing: .06em;
+            text-transform: uppercase;
+            color: var(--text-light);
+            background: var(--card-bg, #fff);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 2px 8px;
         }
 
         /* ── Family Login Styles ── */
@@ -6880,18 +6899,30 @@
                             `).join('')
                         }
 
-                        <!-- Share Token -->
+                        <!-- Not built yet. The example URL that used to sit here
+                             looked real enough to hand to a clinician, so it is
+                             gone; only the plan remains. -->
                         <div class="share-token-box">
-                            <div style="font-size:12px;font-weight:700;color:var(--primary-dark);margin-bottom:4px;">📎 Shareable Link (coming with full sync)</div>
-                            <div class="share-token-url">sicklestrong-v2.netlify.app/report/[family-code]</div>
-                            <div style="font-size:11px;color:var(--text-light);">Share directly with your hematologist via link</div>
+                            <span style="font-size:14px;line-height:1.4;">🔗</span>
+                            <div>
+                                <div class="share-token-title">
+                                    Shareable link
+                                    <span class="share-token-soon">Coming soon</span>
+                                </div>
+                                <div style="font-size:11px;color:var(--text-light);line-height:1.55;margin-top:4px;">
+                                    One day you'll be able to send your hematologist a link instead of a file.
+                                    Not built yet — for now, download the report below and email or print it.
+                                </div>
+                            </div>
                         </div>
                     </div>
 
                     <!-- Actions -->
                     <div class="modal-actions">
                         <button class="btn btn-secondary" style="flex:1;" onclick="printDoctorReport()">🖨️ Print</button>
-                        <button class="btn btn-primary" style="flex:1;" onclick="downloadDoctorReport()">📥 Download PDF</button>
+                        <!-- Says what it gives you: this writes a .txt file, not
+                             a PDF. Print is the route to a PDF, via the browser. -->
+                        <button class="btn btn-primary" style="flex:1;" onclick="downloadDoctorReport()">📥 Download Report</button>
                     </div>
                 </div>
             `;
