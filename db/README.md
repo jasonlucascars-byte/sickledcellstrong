@@ -57,25 +57,37 @@ Only two tables are family-scoped, and neither holds health data:
 
 Recorded here rather than fixed, because database changes are made out of band.
 
-**1. A guessed household code still lets a *new* account join a household.**
-`switch_household()` (used by an existing signed-in user) requires that you
-already hold access to a child in that household — a correct-but-guessed code
-is refused with `NOT_INVITED_TO_THIS_HOUSEHOLD`. `provision_current_user()`,
-which runs at **signup** with a pending join code, has **no equivalent gate**:
-it looks the code up and attaches the new user to that `family_id`.
+**1. ~~A guessed household code lets a *new* account join a household.~~
+CLOSED, 29 Aug 2026 — the signup path was retired.**
 
-Household codes are low entropy — 8 words × 9000 numbers = 72,000 combinations,
-generated with `random()` — and `lookup_family_by_code()` is callable by the
-`anon` role, so valid codes can be confirmed cheaply before signing up.
+Household codes are low entropy (8 words × 9000 = 72,000, from `random()`), and
+`lookup_family_by_code()` was `anon`-callable, so guesses could be validated for
+free. A landed guess put a brand new account inside a real family's household.
+No health data was reachable — every health table is scoped by `child_access`
+and such a user holds none — but they gained membership nobody granted, plus
+that family's `community_posts`.
 
-The consequence is bounded: such a user holds **no `child_access` rows**, so
-they see no child and no health record of any kind. What they do get is
-household membership, which exposes `community_posts` and `subscriptions` for
-that family, and makes them a member a real family never invited.
+The obvious fix does not work, and it is worth writing down why. `switch_household()`
+refuses a guessed code unless the caller already holds access to a child in that
+household. A brand new signup never does, so copying that gate into
+`provision_current_user()` would have rejected every legitimate use rather than
+securing it. The path had to go rather than be gated.
 
-Closing it means applying the same "must already have child access" gate in
-`provision_current_user` that `switch_household` already has, or requiring a
-child invite for household membership entirely.
+Retiring it costs nothing, because `redeem_child_invite()` already creates the
+profile **and** places the person in the child's household — a child invite
+onboards someone completely. The only people the household-code path uniquely
+served were those joining a household while seeing no child.
+
+Now: `provision_current_user()` raises `HOUSEHOLD_CODE_SIGNUP_DISABLED` for a
+non-empty `p_join_code`, mirroring `LEGACY_CHILD_CODE_DISABLED`; and `anon` has
+lost EXECUTE on `lookup_family_by_code()`. `switch_household()` is unchanged and
+still serves signed-in users, gated as before.
+
+One trap for whoever revisits this: `REVOKE EXECUTE ... FROM anon` is a **no-op**
+here. Postgres grants EXECUTE on a new function to `PUBLIC`, and `anon` inherits
+it there rather than holding a direct grant, so the revoke must target `PUBLIC`
+and then re-`GRANT` to `authenticated`. The first attempt silently changed
+nothing and looked like it had worked.
 
 **2. Leaked-password protection is disabled.** Supabase can reject passwords
 known to be breached (HaveIBeenPwned). It is currently off. Worth enabling now
