@@ -184,3 +184,20 @@ evidence the scheme is safe. Run it after touching any render function.
   `alert()` blocks the whole app and is wrong mid-onboarding.
 - Prefer event listeners over inline `onclick` when interpolating user data — a
   name containing a quote would otherwise break out of the attribute.
+
+## graphify
+
+The `graphify` skill (`.claude/skills/graphify/SKILL.md`) builds a knowledge
+graph — god nodes, community structure, cross-file relationships — into
+`graphify-out/` (gitignored). It needs the `graphify` CLI
+(`uv tool install graphifyy`) and is built on demand with `/graphify .`; nothing
+below applies until `graphify-out/graph.json` exists.
+
+Rules, once it does:
+- For codebase questions, first run `graphify query "<question>"`. Use `graphify path "<A>" "<B>"` for relationships and `graphify explain "<concept>"` for focused concepts. These return a scoped subgraph, usually much smaller than GRAPH_REPORT.md or raw grep output.
+- If graphify-out/wiki/index.md exists, use it for broad navigation instead of raw source browsing.
+- Read graphify-out/GRAPH_REPORT.md only for broad architecture review or when query/path/explain do not surface enough context.
+- After modifying code, run `graphify update .` to keep the graph current (AST-only, no API cost).
+
+Note this app is a single ~9,600-line `index.html`, so the graph is thin on
+cross-file structure — it is most useful over `db/`, `tests/`, and the docs.
