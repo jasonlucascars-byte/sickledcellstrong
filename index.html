@@ -8531,7 +8531,7 @@
             // the confirmation round-trip completes.
             const { data, error } = await sb.auth.signUp({
                 email, password,
-                options: { data: { full_name: name, role } }
+                options: { data: { full_name: name, role }, emailRedirectTo: APP_URL }
             });
             if (error) {
                 alert('Sign up failed: ' + error.message); return;
@@ -8869,7 +8869,7 @@
 
             const { data, error } = await sb.auth.signUp({
                 email, password,
-                options: { data: { full_name: name, role: 'caregiver', pending_invite_code: code } }
+                options: { data: { full_name: name, role: 'caregiver', pending_invite_code: code }, emailRedirectTo: APP_URL }
             });
             if (error) return showError(error.message);
 
