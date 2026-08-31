@@ -16,10 +16,18 @@ Re-run that to upgrade; it rewrites `SKILL.md` and `references/`, keeps a
 `.bak` of anything it replaces, and leaves this file alone.
 `.graphify_version` is the stamp the installer compares against.
 
-The installer also wrote the `.claude/settings.json` PreToolUse hooks, which
-nudge toward `graphify query` instead of grep. Know what you are committing to:
-the hook shells out to `graphify` unconditionally, so on a clone where the CLI
-is **not** installed it prints `graphify: command not found` on every Bash,
-Grep, Read, and Glob call. With the CLI present it fails open — silent until a
-graph exists. Either install the CLI, wrap each hook command in
-`command -v graphify >/dev/null 2>&1 && … || true`, or drop the hooks block.
+`.claude/settings.json` holds the installer's PreToolUse hooks, which nudge
+toward `graphify query` instead of grep — with one deliberate change from what
+the installer writes. Each command is wrapped:
+
+```
+command -v graphify >/dev/null 2>&1 && graphify hook-guard <kind> || true
+```
+
+The installer's version calls `graphify` unconditionally, and this file is
+committed, so on a clone without the CLI every Bash, Grep, Read, and Glob call
+printed `graphify: command not found`. The guard makes that case a silent
+exit 0. With the CLI on PATH the guard runs exactly as before — it fails open
+on its own and stays quiet until `graphify-out/graph.json` exists.
+
+Re-running the installer overwrites this file and drops the guard. Put it back.
