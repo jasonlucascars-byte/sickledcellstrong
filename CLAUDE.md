@@ -260,3 +260,26 @@ python3 -m http.server 8123 --bind 127.0.0.1   # then browse http://127.0.0.1:81
 
 Browser calls write snapshots and logs into `.playwright-mcp/` in the working
 directory (gitignored).
+
+## OmniRoute MCP
+
+`.mcp.json` also registers [OmniRoute](https://github.com/diegosouzapw/OmniRoute)
+over streamable HTTP, which exposes its gateway toolset (~110 tools) to a
+session. It is **inert unless OmniRoute is already running on this machine** —
+the entry points at a local port and nothing here installs or starts it:
+
+```bash
+npm i -g omniroute    # server boots on localhost:20128
+```
+
+Only the MCP server is wired up. OmniRoute's other half is a model gateway that
+reroutes coding-agent traffic across third-party providers; this project does
+**not** point Claude Code at it, and that is a deliberate choice, not an
+oversight. Enabling it would send whatever an agent reads here — a children's
+health app — to those providers rather than to Anthropic. Decide that
+separately, per machine.
+
+No credential belongs in `.mcp.json`. `/api/mcp/*` is loopback-only in
+OmniRoute, so a local session needs no key; a remote instance behind a tunnel
+requires an `Authorization: Bearer` key with the `manage` scope, which is
+machine-specific and secret — keep it out of the committed file.
