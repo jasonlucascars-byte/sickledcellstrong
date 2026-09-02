@@ -32,8 +32,9 @@ any push to `main` as a release.
 python3 -c "import re;open('/tmp/c.js','w').write(re.search(r'<script>(.*?)</script>', open('index.html').read(), re.S).group(1))" && node --check /tmp/c.js
 
 # Run the test suites (require Playwright + a Chromium build)
-node tests/xss-escaping.test.mjs        # 14 checks — render-site escaping
-node tests/storage-resilience.test.mjs  # 11 checks — photo size + save failure
+node tests/xss-escaping.test.mjs             # 19 checks — render-site escaping
+node tests/storage-resilience.test.mjs       # 11 checks — photo size + save failure
+node tests/emergency-medical-record.test.mjs # 22 checks — emergency fields + ER flag
 ```
 
 Tests are plain `.mjs` scripts run directly by Node — there is no test runner,
@@ -163,9 +164,22 @@ the scheme instead of escaping.
 `tests/xss-escaping.test.mjs` seeds hostile values into the child, pain,
 temperature, symptom, medication, weight, note and contact fields and drives 14
 render paths, asserting nothing parses into a live DOM node. Its inverse guard
-covers **`downloadDoctorReport` and `downloadSchoolCareSheet` only** —
-`exportNotes` and `exportAllData` follow the same stay-raw rule but are not
-asserted, so a double-escape regression there would not be caught.
+covers all four stay-raw builders, but not all four the same way:
+
+- `downloadDoctorReport`, `downloadSchoolCareSheet` and `exportAllData` are
+  checked **behaviorally** — `Blob` is stubbed, the output captured, and the
+  raw `&`, `'` and `"` asserted to survive with no HTML entities anywhere.
+  Because `exportAllData` serializes `appData` wholesale instead of
+  interpolating by hand, that check doubles as a guard on the storage
+  invariant: escape at the render site, never at the sync boundary.
+- `exportNotes` is checked **statically** — the assertion is that its source
+  contains no `escapeHtml(`/`jsArg(` call. It builds a `mailto:` URL and
+  assigns `window.location.href`, and that assignment cannot be observed:
+  `Location` is [Unforgeable] so the `href` setter can't be stubbed, and an
+  unhandled `mailto:` navigation fires no event. A builder that calls no
+  escaper, over an `appData` proven raw by the check above, is raw by
+  construction — but know that this one guards the *code shape*, not the
+  output.
 
 It also does **not** assert scheme validation: no user value currently reaches
 an `href`/URL position, so there is no such code path to test. If one is ever

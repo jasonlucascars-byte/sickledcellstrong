@@ -194,8 +194,24 @@ const out = await page.evaluate(async () => {
   try { downloadDoctorReport(); r.reportRaw.doctor = captured; } catch (e) { r.reportRaw.doctorErr = e.message; }
   captured = '';
   try { downloadSchoolCareSheet(); r.reportRaw.school = captured; } catch (e) { r.reportRaw.schoolErr = e.message; }
+  captured = '';
+  // exportAllData serializes appData wholesale rather than interpolating by
+  // hand, so this is really a guard on the storage invariant: escaping must
+  // happen at the render site, never at the sync boundary. If anyone ever
+  // escapes on the way *into* appData, the raw values below stop matching.
+  try { exportAllData(); r.reportRaw.allData = captured; } catch (e) { r.reportRaw.allDataErr = e.message; }
 
   window.Blob = realBlob; URL.createObjectURL = realCOU; URL.revokeObjectURL = realROU;
+
+  // exportNotes builds a mailto: URL and assigns window.location.href. That
+  // assignment cannot be observed from a test — Location is [Unforgeable], so
+  // the href setter can't be stubbed, and an unhandled mailto: navigation
+  // fires no event. So this one is guarded statically instead: the regression
+  // it must not have is a well-meaning escapeHtml()/jsArg() wrapped around a
+  // field, which would send a clinician "Sarah O&#39;Brien". Combined with the
+  // exportAllData check above (appData holds raw values), a builder that calls
+  // no escaper produces raw output by construction.
+  r.notesSource = typeof exportNotes === 'function' ? exportNotes.toString() : '';
 
   // Let any onerror handlers on inserted <img> nodes get a chance to fire.
   await new Promise(res => setTimeout(res, 250));
@@ -242,6 +258,35 @@ const s = out.reportRaw.school || '';
 check('school care sheet contains raw ampersand + apostrophe',
   s.includes("Dr. O'Neil & Associates") && !s.includes('&amp;') && !s.includes('&#39;'),
   out.reportRaw.schoolErr || JSON.stringify(s.split('\n').find(l => l.includes("O'Neil")) || ''));
+
+// exportAllData: parse it back rather than substring-matching, because JSON
+// escaping (\" for a quote) is not HTML escaping and would confuse a raw
+// text search. The values must come back byte-identical to what was stored.
+let parsedAll = null, parseErr = '';
+try { parsedAll = JSON.parse(out.reportRaw.allData || ''); } catch (e) { parseErr = e.message; }
+check('exportAllData produced parseable JSON',
+  parsedAll !== null, out.reportRaw.allDataErr || parseErr);
+const exportedChild = parsedAll && (parsedAll.children || []).find(c => /Sarah/.test(c.name || ''));
+const exportedMed = exportedChild && (exportedChild.medications || [])[0];
+check('exportAllData keeps the child name raw (not entity-encoded)',
+  !!exportedChild && exportedChild.name === "Sarah O'Brien & Sons",
+  exportedChild ? JSON.stringify(exportedChild.name) : 'child not found in export');
+check('exportAllData keeps medication name and dose raw',
+  !!exportedMed && exportedMed.name === 'Tylenol & Codeine' && exportedMed.dose === '5mg "as needed"',
+  exportedMed ? JSON.stringify([exportedMed.name, exportedMed.dose]) : 'medication not found');
+check('exportAllData contains no HTML entities anywhere',
+  !/&(amp|quot|#39|lt|gt);/.test(out.reportRaw.allData || ''),
+  (out.reportRaw.allData || '').match(/&(amp|quot|#39|lt|gt);/g)?.slice(0, 5).join(' ') || '');
+
+// exportNotes: static guard — see the comment at the capture site for why this
+// one cannot be exercised behaviorally.
+check('exportNotes calls no escaper (stays raw for the recipient)',
+  out.notesSource.length > 0
+    && !/\bescapeHtml\s*\(/.test(out.notesSource)
+    && !/\bjsArg\s*\(/.test(out.notesSource),
+  out.notesSource.length === 0
+    ? 'exportNotes not found on the page'
+    : (out.notesSource.match(/\b(escapeHtml|jsArg)\s*\(/g) || []).join(' '));
 
 check('no uncaught page errors during the run',
   pageErrors.length === 0, pageErrors.join(' | '));

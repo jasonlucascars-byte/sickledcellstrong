@@ -89,11 +89,41 @@ it there rather than holding a direct grant, so the revoke must target `PUBLIC`
 and then re-`GRANT` to `authenticated`. The first attempt silently changed
 nothing and looked like it had worked.
 
-**2. Leaked-password protection is disabled.** Supabase can reject passwords
-known to be breached (HaveIBeenPwned). It is currently off. Worth enabling now
-that password reset exists — it is a dashboard toggle under Authentication.
+**2. Leaked-password protection is disabled, and cannot be enabled on the
+current plan.** Supabase can reject passwords known to be breached
+(HaveIBeenPwned), but the toggle is **Pro plan and above** — on the current
+plan it is greyed out, so this is a billing decision, not a dashboard toggle.
+The security advisor will keep reporting `auth_leaked_password_protection`
+until the plan changes; that warning is expected, not neglected.
 
-**3. Advisor warnings about SECURITY DEFINER functions are mostly expected.**
+Until then the compensating control is length, which is free. NIST SP 800-63B
+treats length as the strongest single factor and actively discourages
+composition rules, so if only one knob gets turned, turn this one.
+
+**3. The Auth password policy is weaker than the app's own, and disagrees with
+it.** Two separate problems, both in Authentication → Email:
+
+- **Minimum length is 6; the app enforces 8** in all three places that take a
+  password (`handleSignup`, the invite-signup modal, `handlePasswordRecovery`)
+  and the inputs read "Min. 8 characters". The client check is bypassable — a
+  direct API call can set a 6-character password. Raising the server minimum to
+  8 closes that and matches what users are already told. It does not invalidate
+  existing passwords, only new ones.
+- **"Password requirements" is set to lowercase + uppercase + digits, and the
+  app never says so.** A parent typing an 8-character all-lowercase password
+  passes the client check, then gets the raw Supabase rejection through
+  `alert('Sign up failed: ' + error.message)`. Either relax the rule (NIST's
+  preference) or state it in the signup copy — but the two must agree.
+
+**4. The beta-signup surface lives in a different Supabase project.** The
+landing page's waitlist form (`beta_signups`, `claim_beta_signup`,
+`beta_counts`) is **not** in this database — it is in a separate project,
+"SickleStrong Landing". Verified 1 Sep 2026: none of those objects exist in
+`public` here. So this snapshot correctly excludes them, and equally, nothing
+in this repo reviews them. If that form ever handles more than an email
+address, it needs its own snapshot.
+
+**5. Advisor warnings about SECURITY DEFINER functions are mostly expected.**
 The linter flags every such function callable by `anon`/`authenticated`. Most
 are app RPCs that *must* be callable. Three are trigger/event-trigger functions
 (`grant_owner_child_access`, `prevent_last_parent_removal`, `rls_auto_enable`)
