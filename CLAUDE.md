@@ -32,15 +32,27 @@ any push to `main` as a release.
 python3 -c "import re;open('/tmp/c.js','w').write(re.search(r'<script>(.*?)</script>', open('index.html').read(), re.S).group(1))" && node --check /tmp/c.js
 
 # Run the test suites (require Playwright + a Chromium build)
-node tests/xss-escaping.test.mjs        # 14 checks — render-site escaping
-node tests/storage-resilience.test.mjs  # 11 checks — photo size + save failure
+node tests/xss-escaping.test.mjs             # 14 checks — render-site escaping
+node tests/storage-resilience.test.mjs       # 11 checks — photo size + save failure
+node tests/emergency-medical-record.test.mjs # 22 checks — ER fields in both reports
 ```
 
 Tests are plain `.mjs` scripts run directly by Node — there is no test runner,
 so there is no "run a single test" flag. Each file is one suite; run the file.
-Both drive the real `index.html` over `file://` with the Supabase CDN stubbed,
-so they need no server and no network. Chromium is located via `PW_CHROMIUM`,
-defaulting to `/opt/pw-browsers/chromium`.
+All three drive the real `index.html` over `file://` with the Supabase CDN
+stubbed, so they need no server and no network. Chromium is located via
+`PW_CHROMIUM`, defaulting to `/opt/pw-browsers/chromium`.
+
+The `playwright` package itself must be resolvable from the repo, and this
+project has no `node_modules` of its own. Where Playwright is installed
+globally but not locally — Claude Code on the web, where it sits in
+`/opt/node22/lib/node_modules` — Node's ESM resolver will not find it and every
+suite dies with `ERR_MODULE_NOT_FOUND` before opening a browser. Give the
+resolver something to walk up to, outside the repo so nothing lands in git:
+
+```bash
+ln -sfn /opt/node22/lib/node_modules /home/user/node_modules
+```
 
 **Bump `CACHE_VERSION` in `sw.js` when shipping changes** that must reach
 already-installed clients — the service worker is network-first for app files
@@ -171,6 +183,15 @@ It also does **not** assert scheme validation: no user value currently reaches
 an `href`/URL position, so there is no such code path to test. If one is ever
 added, that test has to be written alongside it — the suite passing is not
 evidence the scheme is safe. Run it after touching any render function.
+
+`tests/emergency-medical-record.test.mjs` covers the ER fields a hospital asks
+for on arrival — drug allergies, baseline hemoglobin, last transfusion — across
+`renderEmergencyInfoCard`, the doctor report and the school care sheet. It
+holds the same two lines from the other side: a hostile allergy string must not
+become a live node, and the plain-text builders must still emit a raw `&`. Its
+real subject is absence, though — an unset field has to read "Not recorded",
+never 0, blank or `undefined`, because a clinician must not mistake missing
+data for a negative finding.
 
 ## Conventions
 
