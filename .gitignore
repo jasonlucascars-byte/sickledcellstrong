@@ -1,3 +1,11 @@
 # graphify's knowledge graph output (graph.html, graph.json, GRAPH_REPORT.md).
 # Generated on demand by `/graphify .` — rebuilt, never committed.
 graphify-out/
+
+# Playwright MCP scratch output — page snapshots, console logs, screenshots.
+# Written into the working directory on every browser_* call.
+.playwright-mcp/
+
+# Machine-specific Claude Code settings (e.g. the browser path the Playwright
+# MCP server needs in a container). Never committed — it differs per machine.
+.claude/settings.local.json

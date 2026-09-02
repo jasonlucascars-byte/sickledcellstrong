@@ -201,3 +201,41 @@ Rules, once it does:
 
 Note this app is a single ~9,600-line `index.html`, so the graph is thin on
 cross-file structure — it is most useful over `db/`, `tests/`, and the docs.
+
+## Playwright MCP
+
+`.mcp.json` registers [`@playwright/mcp`](https://github.com/microsoft/playwright-mcp)
+as a project MCP server for driving the app in a real browser — checking a
+render path, reproducing a bug, reading console errors. Claude Code asks you to
+approve a project server the first time it loads it. It is separate from
+`tests/*.test.mjs`, which drive Playwright directly and are the place for
+anything that must keep passing.
+
+Two constraints are baked into the flags, both learned the hard way:
+
+- **`--no-sandbox`.** Sessions run as root in a container, where Chromium
+  refuses to start with its sandbox on ("Chromium sandboxing failed"). On a
+  machine where Chromium *can* sandbox, drop this flag — it is the browser's
+  main defense when a page is hostile, and only the container needs it. Note
+  the `PLAYWRIGHT_MCP_NO_SANDBOX` env var does **not** work as a substitute
+  (tried with `1` and `true`); it has to be the CLI flag.
+- **A browser path, per machine.** The server bundles its own Playwright and
+  looks for that exact Chromium revision, which will not be the one already on
+  the machine, and with no path at all it defaults to the `chrome` channel.
+  Point it at the same binary `tests/` uses by setting
+  `PLAYWRIGHT_MCP_EXECUTABLE_PATH` in the environment (`/opt/pw-browsers/chromium`
+  in Claude Code on the web). That is machine-specific, so it stays out of
+  `.mcp.json` — put it in the environment config, or in gitignored
+  `.claude/settings.local.json` under `env`.
+
+Navigating to `file://` is blocked unless the server is started with
+`--allow-unrestricted-file-access`, which also hands it every file on disk.
+Don't add that flag — serve the app instead, which is closer to production
+anyway:
+
+```bash
+python3 -m http.server 8123 --bind 127.0.0.1   # then browse http://127.0.0.1:8123/index.html
+```
+
+Browser calls write snapshots and logs into `.playwright-mcp/` in the working
+directory (gitignored).
