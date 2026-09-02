@@ -1987,7 +1987,7 @@
                     </div>
                     <div class="input-group">
                         <label class="input-label">Password</label>
-                        <input type="password" class="input-field" id="signupPassword" placeholder="Min. 8 characters" />
+                        <input type="password" class="input-field" id="signupPassword" placeholder="8+ characters, a capital and a number" />
                     </div>
                     <div class="input-group">
                         <label class="input-label">Role</label>
@@ -8301,6 +8301,22 @@
             alert(`If ${email} has a SickleStrong account, a reset link is on its way. 💙\n\nOpen it on this device, choose a new password, then come back and sign in.\n\nIt can take a minute to arrive — check your spam folder too.`);
         }
 
+        // Supabase Auth enforces its own password rules (Authentication → Email
+        // in the dashboard: a minimum length, plus lowercase + uppercase +
+        // digits). Without checking here first, a parent who types eight
+        // lowercase letters passes our length check, gets rejected by the API,
+        // and sees the raw error text mid-signup with no idea what to change.
+        // One helper for all three password entry points so the message never
+        // drifts between them. Keep it in step with the dashboard settings.
+        function passwordProblem(password) {
+            const value = String(password || '');
+            if (value.length < 8) return 'Passwords need to be at least 8 characters long.';
+            if (!/[a-z]/.test(value)) return 'Passwords need at least one lowercase letter.';
+            if (!/[A-Z]/.test(value)) return 'Passwords need at least one capital letter.';
+            if (!/[0-9]/.test(value)) return 'Passwords need at least one number.';
+            return null;
+        }
+
         // Arriving back from the reset email. Supabase puts the user in a
         // recovery session, so the new password is set with updateUser. Detected
         // from the URL fragment, which is why it runs before the normal boot
@@ -8313,13 +8329,14 @@
             // don't sit in the address bar.
             history.replaceState(null, '', location.pathname + location.search);
 
-            const next = prompt('Choose a new password for your SickleStrong account (at least 8 characters):');
+            const next = prompt('Choose a new password for your SickleStrong account\n\n(at least 8 characters, with a capital letter and a number):');
             if (!next) {
                 alert("No problem — your password hasn't changed.\n\nYou can tap 'Forgot your password?' again whenever you're ready.");
                 return true;
             }
-            if (next.length < 8) {
-                alert('That password is too short.\n\nPasswords need at least 8 characters. Tap "Forgot your password?" to get a fresh link.');
+            const nextProblem = passwordProblem(next);
+            if (nextProblem) {
+                alert(`${nextProblem}\n\nTap "Forgot your password?" to get a fresh link and try again.`);
                 return true;
             }
 
@@ -8523,8 +8540,9 @@
             if (!name || !email || !password) {
                 alert('Please fill in all fields.'); return;
             }
-            if (password.length < 8) {
-                alert('Password must be at least 8 characters.'); return;
+            const pwProblem = passwordProblem(password);
+            if (pwProblem) {
+                alert(pwProblem); return;
             }
 
             // Name and role ride along on the auth user so they survive until
@@ -8817,7 +8835,7 @@
                     </div>
                     <div class="input-group">
                         <label class="input-label">Create a Password</label>
-                        <input type="password" class="input-field" id="invitePassword" placeholder="Min. 8 characters" autocomplete="new-password" />
+                        <input type="password" class="input-field" id="invitePassword" placeholder="8+ characters, a capital and a number" autocomplete="new-password" />
                     </div>
                     <div id="inviteSignupError" style="display:none;font-size:13px;color:var(--emergency);margin-bottom:10px;"></div>
                     <button class="btn btn-primary btn-full" id="inviteSignupSubmit">Accept invite 💙</button>
@@ -8861,7 +8879,8 @@
 
             if (!name) return showError('Please enter your name.');
             if (!/^\S+@\S+\.\S+$/.test(email)) return showError('Please enter a valid email address.');
-            if (password.length < 8) return showError('Password must be at least 8 characters.');
+            const pwProblem = passwordProblem(password);
+            if (pwProblem) return showError(pwProblem);
 
             button.disabled = true;
             button.textContent = 'Joining…';

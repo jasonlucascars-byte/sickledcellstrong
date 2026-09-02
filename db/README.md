@@ -109,11 +109,15 @@ it.** Two separate problems, both in Authentication → Email:
   direct API call can set a 6-character password. Raising the server minimum to
   8 closes that and matches what users are already told. It does not invalidate
   existing passwords, only new ones.
-- **"Password requirements" is set to lowercase + uppercase + digits, and the
-  app never says so.** A parent typing an 8-character all-lowercase password
-  passes the client check, then gets the raw Supabase rejection through
-  `alert('Sign up failed: ' + error.message)`. Either relax the rule (NIST's
-  preference) or state it in the signup copy — but the two must agree.
+- ~~**"Password requirements" is set to lowercase + uppercase + digits, and the
+  app never says so.**~~ **Addressed on the app side, 1 Sep 2026.** A parent
+  typing an 8-character all-lowercase password used to pass the client check
+  and then get the raw Supabase rejection through
+  `alert('Sign up failed: ' + error.message)`. `passwordProblem()` now checks
+  the same rules before the API call, and both password inputs state them.
+  **If the dashboard rule is ever changed, change that helper too** — it is a
+  copy of a setting that lives elsewhere, which is exactly the kind of drift
+  this file exists to catch.
 
 **4. The beta-signup surface lives in a different Supabase project.** The
 landing page's waitlist form (`beta_signups`, `claim_beta_signup`,
