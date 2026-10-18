@@ -1,23 +1,22 @@
-# Keeps both Supabase projects awake.
+# Health check for both Supabase projects (app + landing beta signup).
 #
-# Supabase's free plan pauses a project after 1 week with no activity. A paused
-# project means families can't sign in, sync, or redeem invites, and the landing
-# page's Founding Beta form stops saving. This job makes one tiny read against
-# each project every 3 days, well inside that window.
+# Every 3 days this makes one tiny read against each project. If either is
+# unreachable, the job fails and GitHub emails the repo owner, so an outage is
+# found by us rather than by a family who can't sign in or sync.
+#
+# History: this began as a keep-alive, because Supabase's free plan pauses a
+# project after 1 week idle and both projects were found paused. The org moved
+# to Supabase Pro (which never pauses) on 2026-10-18; the job was kept on
+# purpose as an outage alarm. Don't delete it as obsolete.
 #
 # It uses only the publishable (public) keys, which are already shipped to every
 # browser. Row-level security still applies, so the reads return nothing private,
 # and response bodies are never printed.
 #
-# If a project is unreachable (for example, already paused), the job fails and
-# GitHub emails the repo owner.
-#
 # Note: GitHub turns off scheduled workflows in a repo with no commits for 60
 # days. Any push to the repo turns it back on, or re-enable it from the Actions tab.
-#
-# Remove this file once the projects move to Supabase Pro (Pro never pauses).
 
-name: Supabase keep-alive
+name: Supabase health check
 
 on:
   schedule:
