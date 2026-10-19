@@ -134,6 +134,11 @@ for (const width of [390, 360]) {
     check('Pain-free days are counted from the last pain entry', computed.three === '3|Days Pain-Free', computed.three);
     check('Pain logged today resets the count to 0', computed.today === '0');
 
+    const community = await page.evaluate(() => { renderCommunityPosts(); return document.getElementById('community').innerText; });
+    check('Community shows no invented posts or like counts',
+      !/Kim|Beta Family Member|days? ago|week ago|❤️/.test(community) && /Jason, SickleStrong Founder/.test(community));
+    check('Community has no expired event to register for', !/World Sickle Cell Day 2026/.test(community));
+
     const settings = await page.evaluate(() => { showSettings(); const t = document.querySelector('.modal').innerText; document.querySelector('.modal').remove(); return t; });
     check('Settings no longer says "Testing Phase"', !/testing phase/i.test(settings));
   }

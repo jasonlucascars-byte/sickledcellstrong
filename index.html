@@ -1572,7 +1572,7 @@
                                 <span style="font-size:20px;">📊</span>
                                 <span>Doctor Report</span>
                             </div>
-                            <div style="font-size:12px;color:var(--text-light);margin-top:3px;">Last 90 days · PDF ready to share</div>
+                            <div style="font-size:12px;color:var(--text-light);margin-top:3px;">Last 90 days · print or save as PDF</div>
                         </div>
                         <div style="display:flex;gap:8px;">
                             <button class="btn btn-secondary btn-small" onclick="showSchoolCareSheet()">School Care Sheet</button>
@@ -1852,41 +1852,11 @@
                     </button>
                 </div>
 
-                <!-- World Sickle Cell Day Event -->
-                <div style="background:linear-gradient(135deg,var(--primary-faint),var(--purple-light));
-                             border-radius:22px;padding:20px;margin-bottom:14px;
-                             border:1.5px solid var(--primary);">
-                    <div style="display:flex;justify-content:space-between;align-items:flex-start;">
-                        <div>
-                            <div style="font-size:11px;font-weight:700;color:var(--primary);
-                                        text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px;
-                                        font-family:'Sora',sans-serif;">🌍 Event</div>
-                            <div style="font-size:16px;font-weight:800;color:var(--text);
-                                        font-family:'Sora',sans-serif;margin-bottom:4px;">
-                                World Sickle Cell Day 2026
-                            </div>
-                            <div style="font-size:12px;color:var(--text-light);margin-bottom:12px;">
-                                June 19, 2026 · 24-hour virtual event · Free
-                            </div>
-                            <div style="font-size:12px;color:var(--text-mid);line-height:1.6;">
-                                "Closing the Survival Gap: Equity in Sickle Cell Disease"
-                            </div>
-                        </div>
-                    </div>
-                    <button onclick="window.open('https://cayennewellness.org','_blank')"
-                            style="width:100%;margin-top:14px;padding:11px;border-radius:50px;
-                                   border:1.5px solid var(--primary);background:white;
-                                   color:var(--primary-dark);font-size:14px;font-weight:700;
-                                   cursor:pointer;font-family:'Sora',sans-serif;">
-                        Learn More & Register →
-                    </button>
-                </div>
-
                 <!-- Community inspiration posts -->
                 <div style="font-size:12px;font-weight:700;color:var(--text-mid);
                              text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px;
                              font-family:'Sora',sans-serif;">
-                    From The Community
+                    From the founder
                 </div>
 
                 <div id="communityPosts"></div>
@@ -2150,16 +2120,6 @@
             },
             children: [],
             contacts: [],
-            communityPosts: [
-                {
-                    id: 1,
-                    author: 'Sarah M.',
-                    initials: 'SM',
-                    content: 'Just wanted to share that we made it through our first pain episode at home. The hydration tracking really helped! 💪',
-                    time: '2 hours ago',
-                    likes: 24
-                }
-            ],
             notificationsEnabled: false
         };
 
@@ -5390,44 +5350,21 @@
             const container = document.getElementById('communityPosts');
             if (!container) return;
 
-            // Curated inspiration posts — real voices from the SCD community
+            // Only real, attributable words belong here. This list used to hold
+            // invented posts, with invented likes and "2 days ago" stamps,
+            // including a fever story credited to a real person that never
+            // happened. A family living with SCD can tell, and it costs every
+            // other claim the app makes. Add a member's words only with their
+            // permission, and never with made-up engagement numbers.
             const posts = [
                 {
                     initials: 'J',
                     author: 'Jason, SickleStrong Founder',
-                    role: 'Father of Cam (20) & Jaxxon (6)',
+                    role: 'Father of Cam & Jaxxon',
                     time: 'Pinned',
                     color: 'var(--primary)',
                     content: 'Built this app because no tool existed for families managing multiple children with SCD. You are the reason SickleStrong exists. Every piece of feedback you give makes it better for every family that comes after you. 💙',
-                    likes: 24,
                     pinned: true
-                },
-                {
-                    initials: 'K',
-                    author: 'Kim',
-                    role: "Jaxxon's mom · Co-Moderator",
-                    time: '2 days ago',
-                    color: '#e8305a',
-                    content: 'The fever alert saved us a delay last week. Temperature hit 101.4°F and the app caught it before I even thought to check. We were at the hospital within the hour. This is why we log everything. 🙏🏾',
-                    likes: 18
-                },
-                {
-                    initials: 'M',
-                    author: 'Beta Family Member',
-                    role: 'Mother of two warriors',
-                    time: '5 days ago',
-                    color: 'var(--purple)',
-                    content: 'Finally showed my daughter\'s hematologist the pain log from the last 90 days. He said it was the most organized patient history he\'d seen. The doctor report feature is a game changer for appointments.',
-                    likes: 31
-                },
-                {
-                    initials: 'D',
-                    author: 'Beta Family Member',
-                    role: 'Guardian · SCD Warrior himself',
-                    time: '1 week ago',
-                    color: '#10b981',
-                    content: 'As an adult with SCD myself, tracking used to feel like reliving every crisis. This app makes it feel like self-advocacy instead. Big difference mentally.',
-                    likes: 22
                 }
             ];
 
@@ -5467,10 +5404,6 @@
                             ${escapeHtml(post.content)}
                         </div>
                         <div style="display:flex;align-items:center;gap:16px;">
-                            <div style="font-size:13px;color:var(--text-light);
-                                        display:flex;align-items:center;gap:4px;">
-                                ❤️ <span>${post.likes}</span>
-                            </div>
                             <button onclick="window.open('https://www.facebook.com/groups/1343740994540360','_blank')"
                                     style="font-size:12px;color:var(--primary);font-weight:600;
                                            background:none;border:none;cursor:pointer;padding:0;
