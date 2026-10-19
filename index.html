@@ -1971,6 +1971,21 @@
                         <input type="password" class="input-field" id="signupPassword" placeholder="8+ characters, a capital and a number" />
                     </div>
                     <div class="input-group">
+                        <label class="input-label">Your age</label>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                            <label class="invite-choice" style="flex:1;min-width:100px;"><input type="radio" name="signupAge" value="adult" onchange="onSignupAgeChange()" /> <span>18 or older</span></label>
+                            <label class="invite-choice" style="flex:1;min-width:100px;"><input type="radio" name="signupAge" value="teen" onchange="onSignupAgeChange()" /> <span>13 to 17</span></label>
+                            <label class="invite-choice" style="flex:1;min-width:100px;"><input type="radio" name="signupAge" value="child" onchange="onSignupAgeChange()" /> <span>Under 13</span></label>
+                        </div>
+                    </div>
+                    <div class="input-group" id="signupParentEmailGroup" style="display:none;">
+                        <label class="input-label">Parent or guardian's email</label>
+                        <input type="email" class="input-field" id="signupParentEmail" placeholder="parent@email.com" autocomplete="off" />
+                        <div style="font-size:12px;color:var(--text-light);line-height:1.5;margin-top:6px;">
+                            Your account opens once they approve it. You'll send them a link after you confirm your email.
+                        </div>
+                    </div>
+                    <div class="input-group" id="signupRoleGroup">
                         <label class="input-label">Role</label>
                         <select class="input-field" id="signupRole">
                             <option value="parent">Parent</option>
@@ -1986,10 +2001,10 @@
                 </div>
 
                 <p style="text-align:center;font-size:12px;color:var(--text-light);margin-top:16px;">
-                    By creating an account, you confirm you're 18 or older and agree to our
+                    By creating an account, you confirm you're 13 or older and agree to our
                     <a href="https://sicklestrong-landing-v2.netlify.app/privacy.html" target="_blank" rel="noopener" style="color:var(--primary);">Privacy Policy</a>.
+                    If you're 13 to 17, your account opens only after a parent or guardian approves it.
                     Only people you invite to a child can see that child's records.
-                    <br><br>Age 13 to 17? Ask your parent or guardian to invite you from Family &amp; Sharing.
                 </p>
 
                 <!-- Skip for existing localStorage users -->
@@ -8872,6 +8887,15 @@
             }
             updateFamilyMembersPreview();
 
+            if (await teenNeedsApproval(data.user)) {
+                showTeenWaiting(data.user);
+                return;
+            }
+            if (readPendingApproval()) {
+                await showTeenApproval(readPendingApproval());
+                return;
+            }
+
             if (invitedChildName) {
                 trackFamilyMemberJoined();
                 alert(`Welcome back! 💙\n\nYou're on ${invitedChildName}'s care team.`);
@@ -8981,16 +9005,35 @@
             if (!name || !email || !password) {
                 alert('Please fill in all fields.'); return;
             }
+            const age = document.querySelector('input[name="signupAge"]:checked')?.value;
+            if (!age) { alert('Please choose your age.'); return; }
+            if (age === 'child') {
+                alert("SickleStrong accounts start at 13. 💙\n\nA parent or guardian can set up your profile and log for you on their phone, and you can join when you turn 13.");
+                return;
+            }
+            const teen = age === 'teen';
+            const parentEmail = teen ? document.getElementById('signupParentEmail').value.trim() : '';
+            if (teen && !/^\S+@\S+\.\S+$/.test(parentEmail)) {
+                alert("Please enter your parent or guardian's email."); return;
+            }
+            if (teen && parentEmail.toLowerCase() === email.toLowerCase()) {
+                alert("Your parent's email has to be different from yours."); return;
+            }
             const pwProblem = passwordProblem(password);
             if (pwProblem) {
                 alert(pwProblem); return;
             }
 
-            // Name and role ride along on the auth user so they survive until
-            // the confirmation round-trip completes.
+            // Name, role, and for a teen the age band and parent's email, ride
+            // along on the auth user so they survive the confirmation round-trip.
+            // age_band '13-17' is what the database checks (is_teen_account):
+            // such an account opens nothing until a parent approves it.
+            const meta = teen
+                ? { full_name: name, role: 'teen', age_band: '13-17', parent_email: parentEmail }
+                : { full_name: name, role, age_band: '18+' };
             const { data, error } = await sb.auth.signUp({
                 email, password,
-                options: { data: { full_name: name, role }, emailRedirectTo: APP_URL }
+                options: { data: meta, emailRedirectTo: APP_URL }
             });
             if (error) {
                 alert(passwordErrorReason(error) || ('Sign up failed: ' + error.message)); return;
@@ -9001,7 +9044,15 @@
             // misleading "family setup failed" message.
             if (!data.session) {
                 closeAuthScreen();
-                alert(`Almost there, ${name}! 💙\n\nWe sent a confirmation link to ${email}.\n\nOpen it to confirm your account, then come back and sign in — we'll finish setting up your family then.`);
+                alert(teen
+                    ? `Almost there, ${name}! 💙\n\nWe sent a confirmation link to ${email}.\n\nOpen it, then sign in. You'll send your parent a link to approve your account.`
+                    : `Almost there, ${name}! 💙\n\nWe sent a confirmation link to ${email}.\n\nOpen it to confirm your account, then come back and sign in — we'll finish setting up your family then.`);
+                return;
+            }
+            if (teen) {
+                await ensureUserProvisioned(data.user);
+                closeAuthScreen();
+                showTeenWaiting(data.user);
                 return;
             }
 
@@ -9342,6 +9393,230 @@
         }
         function clearPendingInvite() {
             try { localStorage.removeItem('ss_pending_invite'); } catch (e) {}
+        }
+
+        // ── TEEN SELF SIGN-UP, APPROVED BY A PARENT ─────────────────────
+        //
+        // A 13–17-year-old can create an account, but it opens nothing until a
+        // parent approves: the teen sends a ?approve=TEEN-XXXXXXXX link, and the
+        // parent, signed in with the email the teen named, picks which of their
+        // children's profiles is the teen's. Approval is a child_access row
+        // (approve_teen_request). The database also refuses to let a teen
+        // account create a child profile (children_block_teen_insert), so this
+        // screen is a guide, not the lock.
+
+        function onSignupAgeChange() {
+            const age = document.querySelector('input[name="signupAge"]:checked')?.value;
+            document.getElementById('signupParentEmailGroup').style.display = age === 'teen' ? 'block' : 'none';
+            document.getElementById('signupRoleGroup').style.display = age === 'teen' ? 'none' : 'block';
+        }
+
+        function isTeenUser(user) {
+            return (user?.user_metadata?.age_band || '') === '13-17';
+        }
+
+        // True only for a teen with no access to any child yet. A read error
+        // answers false: the database still blocks what matters.
+        async function teenNeedsApproval(user) {
+            if (!isTeenUser(user)) return false;
+            try {
+                const { data, error } = await sb.from('child_access').select('id').eq('auth_id', user.id).limit(1);
+                if (error) return false;
+                return !data || data.length === 0;
+            } catch (e) { return false; }
+        }
+
+        function readApproveFromUrl() {
+            try {
+                const url = new URL(location.href);
+                const raw = url.searchParams.get('approve');
+                if (!raw) return null;
+                url.searchParams.delete('approve');
+                history.replaceState({}, '', url.pathname + url.search + url.hash);
+                const code = raw.trim().toUpperCase();
+                return /^TEEN-[A-F0-9]{8}$/.test(code) ? code : null;
+            } catch (e) { return null; }
+        }
+
+        // localStorage, not memory: a parent who has to create an account goes
+        // through email confirmation, often in a new tab, before approving.
+        function savePendingApproval(code) { try { localStorage.setItem('ss_pending_approve', code); } catch (e) {} }
+        function readPendingApproval() { try { return localStorage.getItem('ss_pending_approve'); } catch (e) { return null; } }
+        function clearPendingApproval() { try { localStorage.removeItem('ss_pending_approve'); } catch (e) {} }
+
+        function showTeenWaiting(user) {
+            document.getElementById('teenWaiting')?.remove();
+            const name = user?.user_metadata?.full_name || '';
+            const parentEmail = user?.user_metadata?.parent_email || '';
+            const screen = document.createElement('div');
+            screen.id = 'teenWaiting';
+            screen.style.cssText = 'position:fixed;inset:0;z-index:5000;background:var(--bg);overflow-y:auto;padding:32px 20px;';
+            screen.innerHTML = `
+                <div style="max-width:420px;margin:0 auto;background:white;border-radius:22px;padding:24px;box-shadow:0 8px 30px var(--shadow);">
+                    <div style="font-size:44px;text-align:center;margin-bottom:8px;">💙</div>
+                    <div class="modal-title" style="text-align:center;" id="teenWaitTitle"></div>
+                    <p style="font-size:14px;line-height:1.6;margin-bottom:16px;">
+                        Because you're under 18, a parent or guardian approves your account before it opens.
+                        Send them the link below. They'll choose your profile, and then it's all yours.
+                    </p>
+                    <div class="input-group">
+                        <label class="input-label">Parent or guardian's email</label>
+                        <input type="email" class="input-field" id="teenParentEmail" />
+                    </div>
+                    <div id="teenWaitError" role="alert" style="display:none;font-size:13px;color:var(--emergency);margin-bottom:10px;"></div>
+                    <div id="teenLinkBox" style="display:none;font-size:13px;background:var(--primary-faint);border-radius:12px;padding:12px;margin-bottom:12px;word-break:break-all;"></div>
+                    <button class="btn btn-primary btn-full" id="teenSendLink" style="margin-bottom:8px;">Send approval link</button>
+                    <button class="btn btn-secondary btn-full" id="teenCheckAgain" style="margin-bottom:8px;">My parent approved — check again</button>
+                    <button class="btn btn-secondary btn-full" id="teenSignOut">Sign out</button>
+                    <p style="text-align:center;font-size:12px;margin-top:12px;">
+                        <a href="#" id="teenDelete" style="color:var(--text-light);">Delete my account</a>
+                    </p>
+                </div>
+            `;
+            document.body.appendChild(screen);
+            screen.querySelector('#teenWaitTitle').textContent = name ? `Almost there, ${name}!` : 'Almost there!';
+            screen.querySelector('#teenParentEmail').value = parentEmail;
+
+            const err = screen.querySelector('#teenWaitError');
+            const showErr = (m) => { err.textContent = m; err.style.display = 'block'; };
+
+            screen.querySelector('#teenSendLink').addEventListener('click', async () => {
+                err.style.display = 'none';
+                if (cloudIsOffline()) return showErr('You appear to be offline. Reconnect and try again.');
+                const email = screen.querySelector('#teenParentEmail').value.trim();
+                const { data, error } = await sb.rpc('create_teen_request', { p_parent_email: email });
+                if (error || !data || !data.length) {
+                    const raw = (error && error.message) || '';
+                    if (raw.includes('PARENT_EMAIL_INVALID')) return showErr("Please check your parent's email.");
+                    if (raw.includes('PARENT_EMAIL_IS_OWN')) return showErr("That's your email. Please enter your parent's.");
+                    console.warn('[SickleStrong] teen request failed', error);
+                    return showErr("We couldn't create the link just now. Please try again.");
+                }
+                const link = `${APP_URL}?approve=${encodeURIComponent(data[0].out_code)}`;
+                const text = `Hi! I'd like to use SickleStrong to track my sickle cell care. Because I'm under 18, it needs your OK. Open this link and sign in with ${data[0].out_parent_email} to approve:`;
+                const box = screen.querySelector('#teenLinkBox');
+                box.textContent = `Link for ${data[0].out_parent_email}: ${link}`;
+                box.style.display = 'block';
+                if (navigator.share) {
+                    try { await navigator.share({ title: 'Approve my SickleStrong account', text, url: link }); return; } catch (e) {}
+                }
+                location.href = `mailto:${encodeURIComponent(data[0].out_parent_email)}?subject=${encodeURIComponent('Approve my SickleStrong account')}&body=${encodeURIComponent(text + '\n\n' + link)}`;
+            });
+            screen.querySelector('#teenCheckAgain').addEventListener('click', () => location.reload());
+            screen.querySelector('#teenDelete').addEventListener('click', (e) => {
+                e.preventDefault();
+                screen.remove();
+                showDeleteAccount();
+            });
+            screen.querySelector('#teenSignOut').addEventListener('click', async () => {
+                try { await sb.auth.signOut({ scope: 'local' }); } catch (e) {}
+                try {
+                    Object.keys(localStorage)
+                        .filter(k => k === 'sickleStrongData' || k.startsWith('ss_') || k.startsWith('sb-'))
+                        .forEach(k => localStorage.removeItem(k));
+                } catch (e) {}
+                location.reload();
+            });
+        }
+
+        async function showTeenApproval(code) {
+            if (!code) return;
+            const { data, error } = await sb.rpc('lookup_teen_request', { p_code: code });
+            if (error || !data || !data.length) {
+                clearPendingApproval();
+                showToast("That approval link isn't valid. Ask your teen to send a new one.", 'warning');
+                return;
+            }
+            const req = data[0];
+            if (req.out_status !== 'pending' || req.out_expired) {
+                clearPendingApproval();
+                showToast(req.out_status === 'approved' ? 'That request is already approved. 💙' : 'That approval link has expired. Ask your teen to send a new one.', 'warning');
+                return;
+            }
+
+            const teenName = req.out_teen_name || 'Your teen';
+            const myChildren = (familyAuth.childCircles || []).filter(c => c.isParent);
+            const modal = document.createElement('div');
+            modal.className = 'modal active';
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width:440px;">
+                    <button class="modal-close" onclick="this.closest('.modal').remove()">×</button>
+                    <div class="modal-title">💙 Approve ${escapeHtml(teenName)}</div>
+                    <p style="font-size:14px;line-height:1.6;margin-bottom:14px;">
+                        <strong>${escapeHtml(teenName)}</strong> created a SickleStrong account and named you as their
+                        parent or guardian. Because they're 13 to 17, it stays closed until you approve it.
+                    </p>
+                    <div id="approveBody"></div>
+                    <div id="approveError" role="alert" style="display:none;font-size:13px;color:var(--emergency);margin:10px 0;"></div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            const body = modal.querySelector('#approveBody');
+
+            if (!req.out_email_matches) {
+                body.innerHTML = `
+                    <p style="font-size:13px;line-height:1.6;color:var(--text-light);margin-bottom:14px;">
+                        This request was sent to <strong>${escapeHtml(req.out_parent_email_hint || '')}</strong>.
+                        Sign out, then sign in with that email to approve it.
+                    </p>
+                    <button class="btn btn-secondary btn-full" onclick="this.closest('.modal').remove()">Close</button>`;
+                return;
+            }
+            if (!myChildren.length) {
+                body.innerHTML = `
+                    <p style="font-size:13px;line-height:1.6;color:var(--text-light);margin-bottom:14px;">
+                        First add ${escapeHtml(teenName)}'s profile (choose “My child” when you set up, or + Add child),
+                        then open the link again. We'll keep it ready for you.
+                    </p>
+                    <button class="btn btn-secondary btn-full" onclick="this.closest('.modal').remove()">OK</button>`;
+                return;
+            }
+
+            body.innerHTML = `
+                <div class="report-section-title">Which profile is theirs?</div>
+                <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px;">
+                    ${myChildren.map((c, i) => `
+                        <label class="invite-choice"><input type="radio" name="approveChild" value="${escapeHtml(c.childId)}" ${i === 0 ? 'checked' : ''} />
+                        <span><strong>${escapeHtml(c.childName)}</strong></span></label>`).join('')}
+                </div>
+                <div class="report-section-title">What can they do?</div>
+                <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px;">
+                    <label class="invite-choice"><input type="radio" name="approvePerm" value="full" />
+                        <span><strong>Full Access</strong><br><span class="invite-choice-sub">Log care and manage medications, like you</span></span></label>
+                    <label class="invite-choice"><input type="radio" name="approvePerm" value="report" checked />
+                        <span><strong>Can Report Pain &amp; Fever</strong><br><span class="invite-choice-sub">Add pain and temperature entries; can't change medications</span></span></label>
+                    <label class="invite-choice"><input type="radio" name="approvePerm" value="view" />
+                        <span><strong>View Only</strong><br><span class="invite-choice-sub">See their records, change nothing</span></span></label>
+                </div>
+                <button class="btn btn-primary btn-full" id="approveConfirm">Approve</button>
+                <p style="font-size:12px;color:var(--text-light);line-height:1.5;margin-top:10px;">
+                    You can change or remove their access any time in Family &amp; Sharing.
+                </p>`;
+
+            modal.querySelector('#approveConfirm').addEventListener('click', async () => {
+                const errEl = modal.querySelector('#approveError');
+                const childId = modal.querySelector('input[name="approveChild"]:checked')?.value;
+                const permission = modal.querySelector('input[name="approvePerm"]:checked')?.value || 'report';
+                if (cloudIsOffline()) { errEl.textContent = 'You appear to be offline. Reconnect and try again.'; errEl.style.display = 'block'; return; }
+                const { data: done, error: aerr } = await sb.rpc('approve_teen_request', {
+                    p_code: code, p_child_id: childId, p_permission: permission
+                });
+                if (aerr || !done || !done.length) {
+                    const raw = (aerr && aerr.message) || '';
+                    errEl.textContent = raw.includes('NOT_THE_NAMED_PARENT')
+                        ? 'This request was sent to a different email.'
+                        : raw.includes('NOT_A_PARENT_FOR_THIS_CHILD')
+                            ? "Only a parent on that profile can approve."
+                            : "We couldn't approve that just now. Please try again.";
+                    errEl.style.display = 'block';
+                    return;
+                }
+                clearPendingApproval();
+                modal.remove();
+                trackEvent('teen_approved');
+                showToast(`${done[0].out_teen_name || 'Your teen'} can now sign in and see ${done[0].out_child_name}'s profile. 💙`);
+                try { await loadFamilyMembers(); updateFamilyMembersPreview(); } catch (e) {}
+            });
         }
 
         async function submitInviteSignup(code, modal) {
@@ -10577,6 +10852,8 @@
             }
 
             const pendingInvite = readInviteFromUrl();
+            const approveFromUrl = readApproveFromUrl();
+            if (approveFromUrl) savePendingApproval(approveFromUrl);
 
             // The join code is always read — and therefore always stripped from
             // the address bar — even when an invite is also present, so a
@@ -10656,7 +10933,11 @@
             });
 
             // Last, so it opens over a fully rendered app rather than racing it.
-            if (pendingInvite) {
+            let bootUser = null;
+            try { bootUser = (await sb.auth.getSession()).data.session?.user || null; } catch (e) {}
+            if (bootUser && await teenNeedsApproval(bootUser)) {
+                showTeenWaiting(bootUser);
+            } else if (pendingInvite) {
                 await handleInviteLink(pendingInvite);
             } else if (readPendingInvite()) {
                 // Usually right after a password reset: they're signed in now,
@@ -10664,6 +10945,13 @@
                 let hasSession = false;
                 try { hasSession = !!(await sb.auth.getSession()).data.session; } catch (e) {}
                 if (hasSession) await redeemInviteNow(readPendingInvite(), null);
+            } else if (readPendingApproval()) {
+                if (bootUser) {
+                    await showTeenApproval(readPendingApproval());
+                } else {
+                    openSignIn();
+                    showToast('Sign in, or create your account, with the email your teen entered. Then we\'ll open the approval.');
+                }
             } else if (pendingJoin) {
                 await handleJoinLink(pendingJoin);
             }

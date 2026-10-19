@@ -74,8 +74,8 @@ const notice = await page.evaluate(() => { showInviteSignupModal('INV-X'); const
 check('Invite notice says 13+ with a parent\'s invite, not 18+ only', /13 or older/.test(notice) && !/confirm you're 18 or older/.test(notice));
 
 const familySignup = await page.evaluate(() => document.getElementById('authScreen').innerText);
-check('Family sign-up stays 18+ and points teens to a parent invite',
-  /18 or older/.test(familySignup) && /13 to 17\? Ask your parent/i.test(familySignup));
+check('Family sign-up says 13+ and that a parent approves 13 to 17',
+  /13 or older/.test(familySignup) && /parent or guardian approves/i.test(familySignup));
 
 const composer = await page.evaluate(() => {
   familyAuth.childCircles = [{ childId: 'c1', childName: 'Maya', isParent: true }];

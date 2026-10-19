@@ -42,6 +42,7 @@ node tests/first-run.test.mjs                # 20 checks — setup wording, phon
 node tests/teen-access.test.mjs              # 11 checks — 13–17 join by parent invite; under 13 blocked
 node tests/password-reset.test.mjs           # 13 checks — clear password reasons; invite survives a reset
 node tests/logged-by.test.mjs                # 12 checks — "Logged by" names; pain saved as rated 2–10
+node tests/teen-approval.test.mjs            # 22 checks — teen self sign-up, parent approval
 ```
 
 Tests are plain `.mjs` scripts run directly by Node — there is no test runner,
@@ -154,11 +155,16 @@ on a control (hidden by `applyPermissionGating()`, which re-runs from
 `updateUI()` when the active child changes). The `report` tier exists for the
 least-trusted helpers — it allows logging pain and temperature and nothing else.
 
-Ages: family sign-up is 18+. Teens 13–17 may join **only through a child
-invite** (the invite sign-up asks their age and records `age_band` on the auth
-user's metadata); that is acceptable because `generate_child_invite` lets only
-a parent of that child create an invite. Under 13 never gets an account
-(COPPA). The privacy policy (landing repo, section 2) states these rules, so
+Ages: every sign-up asks age and records `age_band` (`18+` / `13-17`) on the
+auth user's metadata. Under 13 never gets an account (COPPA). A teen 13–17
+gets access to a child **only from a parent**, two ways: a child invite
+(`generate_child_invite` lets only a parent create one), or self sign-up then
+parent approval — the teen sends a `?approve=TEEN-XXXXXXXX` link from the
+waiting screen (`create_teen_request`), and the parent, signed in with the
+email the teen named, picks the profile (`approve_teen_request` inserts the
+`child_access` row). Until then the `children_block_teen_insert` trigger stops
+a teen account creating child profiles, so the waiting screen is a guide, not
+the lock. The privacy policy (landing repo, section 2) states these rules, so
 change both together.
 
 **Database work is out of band.** The RPCs the frontend calls
