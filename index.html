@@ -3330,6 +3330,7 @@
             }
 
             saveData();
+            trackPainLogged();
 
             // Cloud sync
             (async () => {
@@ -3396,6 +3397,7 @@
             child.temperatureLog.push(tempEntry);
 
             saveData();
+            trackTempLogged(temperature >= 101.3);
             document.querySelector('.modal').remove();
 
             // Cloud sync
@@ -3473,6 +3475,7 @@
                     const tempEntry = { id: Date.now() + childIndex, temperature, timestamp: new Date().toISOString() };
                     child.temperatureLog.push(tempEntry);
                     toSync.push({ entry: tempEntry, childId: child.id });
+                    trackTempLogged(temperature >= 101.3);
 
                     if (temperature >= 101.3) {
                         hasEmergency = true;
@@ -4122,6 +4125,10 @@
                 weightHistory: [{ date: new Date().toISOString(), weight: weight }]
             };
             
+            // Captured before the push below: the first child completes setup,
+            // every later one is an added child. Both feed the onboarding funnel.
+            const isFirstChild = appData.children.length === 0;
+
             // Save parent info (only on first setup)
             if (appData.children.length === 0) {
                 appData.parents.parent1 = {
@@ -4143,6 +4150,8 @@
             appData.children.push(child);
             appData.currentChildId = child.id;
             appData.setupComplete = true;
+            if (isFirstChild) trackSetupComplete(wizardData.diseaseType);
+            trackChildAdded();
 
             // Sync to Supabase if logged in
             (async () => {
