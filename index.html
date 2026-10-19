@@ -1382,8 +1382,11 @@
         /* Responsive */
         @media (max-width: 480px) {
             .quick-stats {
-                grid-template-columns: repeat(2, 1fr);
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+                gap: 8px;
             }
+            .stat-card { padding: 14px 6px; }
+            .stat-value { font-size: 22px; }
             
             .disease-type-grid {
                 grid-template-columns: 1fr;
@@ -1399,14 +1402,22 @@
             }
         }
         
+        /* All seven tabs fit on a phone; the last one used to be cut off,
+           with nothing hinting the bar scrolls. */
+        @media (max-width: 480px) {
+            .nav-tabs { padding: 8px 4px 12px; }
+            .nav-tab { flex: 1 1 0; min-width: 0; margin: 0 1px; padding: 8px 0; }
+            .nav-label { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        }
+
         @media (max-width: 360px) {
             .nav-label {
                 font-size: 8px;
             }
             
             .nav-tab {
-                min-width: 55px;
-                padding: 6px 2px;
+                min-width: 0;
+                padding: 6px 0;
             }
         }
 
@@ -1524,7 +1535,7 @@
                     </div>
                     <div class="stat-card">
                         <div class="stat-value" id="daysPainFree">0</div>
-                        <div class="stat-label">Pain-Free</div>
+                        <div class="stat-label" id="daysPainFreeLabel">Days Pain-Free</div>
                     </div>
                 </div>
 
@@ -2266,7 +2277,7 @@
         const wizardSteps = [
             {
                 title: 'Welcome to SickleStrong! 💙',
-                subtitle: 'The only app for managing sickle cell disease across every age',
+                subtitle: 'Sickle cell care, organized: for your child, your teen, or yourself',
                 render: () => `
                     <div style="text-align:center;padding:10px 0 20px;">
                         <div style="font-size:56px;margin-bottom:16px;">💙</div>
@@ -2336,8 +2347,8 @@
                 `
             },
             {
-                title: wizardData.selfTracking ? 'Your Contact Info' : 'Parent/Caregiver Information',
-                subtitle: wizardData.selfTracking ? 'For emergency situations' : 'Who will be caring for your child?',
+                title: () => wizardData.selfTracking ? 'Your Contact Info' : 'Parent/Caregiver Information',
+                subtitle: () => wizardData.selfTracking ? 'So your care team can reach you' : 'Who will be caring for your child?',
                 render: () => `
                     ${wizardData.selfTracking ? `
                     <div style="background:var(--primary-faint);border-radius:14px;
@@ -2391,8 +2402,8 @@
                 `
             },
             {
-                title: wizardData.selfTracking ? 'Your Profile' : 'Child Profile',
-                subtitle: wizardData.selfTracking ? 'Tell us about yourself' : 'Tell us about your child',
+                title: () => wizardData.selfTracking ? 'Your Profile' : 'Child Profile',
+                subtitle: () => wizardData.selfTracking ? 'Tell us about yourself' : 'Tell us about your child',
                 render: () => `
                     <div class="input-group">
                         <label class="input-label">${wizardData.selfTracking ? 'Your Name *' : "Child's Name *"}</label>
@@ -2410,10 +2421,10 @@
                                     margin-bottom:8px;font-family:'Sora',sans-serif;">
                             Adults
                         </div>
-                        <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-bottom:12px;">
+                        <div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;margin-bottom:12px;">
                             ${adultEmojiOptions.map((emoji) => `
                                 <button type="button" onclick="selectEmoji('${emoji}')"
-                                    style="font-size:28px;padding:10px;
+                                    style="font-size:24px;padding:8px 0;width:100%;line-height:1.2;
                                            border:2px solid ${wizardData.childEmoji === emoji ? 'var(--primary)' : 'var(--border)'};
                                            border-radius:12px;
                                            background:${wizardData.childEmoji === emoji ? 'var(--primary-faint)' : 'white'};
@@ -2429,11 +2440,11 @@
                         </div>
                         ` : ''}
 
-                        <div style="display:grid;grid-template-columns:repeat(${wizardData.selfTracking ? 6 : 5},1fr);gap:${wizardData.selfTracking ? 6 : 8}px;margin-bottom:8px;">
+                        <div style="display:grid;grid-template-columns:repeat(${wizardData.selfTracking ? 6 : 5},minmax(0,1fr));gap:${wizardData.selfTracking ? 6 : 8}px;margin-bottom:8px;">
                             ${emojiOptions.map((emoji) => `
                                 <button type="button" onclick="selectEmoji('${emoji}')"
-                                    style="font-size:${wizardData.selfTracking ? 24 : 28}px;
-                                           padding:${wizardData.selfTracking ? 8 : 10}px;
+                                    style="font-size:${wizardData.selfTracking ? 24 : 26}px;
+                                           padding:8px 0;width:100%;line-height:1.2;
                                            border:2px solid ${wizardData.childEmoji === emoji ? 'var(--primary)' : 'var(--border)'};
                                            border-radius:12px;
                                            background:${wizardData.childEmoji === emoji ? 'var(--primary-faint)' : 'white'};
@@ -2495,7 +2506,7 @@
             },
             {
                 title: 'Disease Type',
-                subtitle: 'What type of sickle cell disease?',
+                subtitle: () => wizardData.selfTracking ? 'Which type do you have?' : 'Which type does your child have?',
                 render: () => `
                     <div class="disease-type-grid">
                         <div class="disease-option ${wizardData.diseaseType === 'HbSS' ? 'selected' : ''}" onclick="selectDiseaseType('HbSS')">
@@ -2527,7 +2538,7 @@
             },
             {
                 title: 'Hematologist Information',
-                subtitle: 'Your child\'s specialist doctor',
+                subtitle: () => wizardData.selfTracking ? 'Your sickle cell specialist' : 'Your child\'s sickle cell specialist',
                 render: () => `
                     <div class="input-group">
                         <label class="input-label">Hematologist Name</label>
@@ -2553,7 +2564,7 @@
             },
             {
                 title: 'Select Medications',
-                subtitle: 'Choose which medications your child takes',
+                subtitle: () => wizardData.selfTracking ? 'Choose the medications you take' : 'Choose the medications your child takes',
                 render: () => {
                     const diseaseInfo = diseaseTypes[wizardData.diseaseType];
                     // Initialize selectedMeds if not already set
@@ -2591,26 +2602,18 @@
             },
             {
                 title: 'Enable Notifications',
-                subtitle: 'Never miss a medication',
+                subtitle: 'A gentle check for missed doses',
                 render: () => `
                     <div style="text-align: center; padding: 20px 0;">
                         <div style="font-size: 64px; margin-bottom: 20px;">🔔</div>
+                        <!-- Copy matches what scheduleMedicationReminders() really does
+                             (one 8 PM check, while the app is open). The old text promised
+                             15-minute and on-time reminders that were never built. -->
                         <p style="color: var(--text); margin-bottom: 20px; line-height: 1.8;">
-                            Get reminders 15 minutes before each medication is due, plus end-of-day safety checks if any doses are missed.
+                            At 8 PM, SickleStrong checks today's doses and nudges you if any look missed.
                         </p>
-                        <div style="background: var(--bg); padding: 20px; border-radius: 16px; margin-bottom: 30px;">
-                            <div style="font-size: 14px; color: var(--text); margin-bottom: 12px; display: flex; align-items: center; gap: 12px;">
-                                <span>⏰</span>
-                                <span>15-minute advance reminders</span>
-                            </div>
-                            <div style="font-size: 14px; color: var(--text); margin-bottom: 12px; display: flex; align-items: center; gap: 12px;">
-                                <span>🔔</span>
-                                <span>On-time medication alerts</span>
-                            </div>
-                            <div style="font-size: 14px; color: var(--text); display: flex; align-items: center; gap: 12px;">
-                                <span>🛡️</span>
-                                <span>End-of-day safety checks</span>
-                            </div>
+                        <div style="background: var(--bg); padding: 16px 20px; border-radius: 16px; margin-bottom: 30px; font-size: 14px; color: var(--text-light); line-height: 1.6; text-align: left;">
+                            🛡️ Works while SickleStrong is open on this phone. Reminders before each dose are coming soon.
                         </div>
                         <button class="btn btn-primary btn-full" style="margin-bottom: 10px;" onclick="enableNotificationsInWizard()">Enable Notifications</button>
                         <button class="btn btn-secondary btn-full" onclick="nextWizardStep()">Skip for Now</button>
@@ -2624,7 +2627,7 @@
                     <div style="text-align: center; padding: 20px 0;">
                         <div style="font-size: 64px; margin-bottom: 20px;">✅</div>
                         <p style="color: var(--text); margin-bottom: 30px; line-height: 1.8; font-size: 16px;">
-                            Your profile is complete! You can now start tracking medications, logging symptoms, and managing your child's care.
+                            Your profile is complete! You can now start tracking medications, logging symptoms, and managing ${wizardData.selfTracking ? 'your' : "your child's"} care.
                         </p>
                         <div style="background: linear-gradient(135deg, #F0F9FF 0%, #E0F2FE 100%); padding: 20px; border-radius: 16px; margin-bottom: 30px;">
                             <p style="font-size: 14px; color: var(--text); margin-bottom: 12px;">
@@ -2655,9 +2658,13 @@
             
             // Render current step
             const step = wizardSteps[wizardStep];
+            // Titles that depend on "My child" vs "Add myself" are functions:
+            // a plain value was computed once at page load, before the choice
+            // was made, so someone tracking themselves kept seeing "your child".
+            const resolve = v => (typeof v === 'function' ? v() : v);
             content.innerHTML = `
-                <div class="wizard-title">${step.title}</div>
-                <div class="wizard-subtitle">${step.subtitle}</div>
+                <div class="wizard-title">${resolve(step.title)}</div>
+                <div class="wizard-subtitle">${resolve(step.subtitle)}</div>
                 ${step.render()}
             `;
         }
@@ -4807,6 +4814,25 @@
         }
 
         // UI Updates
+        function renderPainFreeStat(child) {
+            const valueEl = document.getElementById('daysPainFree');
+            const labelEl = document.getElementById('daysPainFreeLabel');
+            if (!valueEl) return;
+            const times = (child.painLog || [])
+                .map(p => Date.parse(p.startTime || p.timestamp))
+                .filter(t => !isNaN(t));
+            if (!times.length) {
+                // Nothing logged yet: a big "0" here read like a failing score.
+                valueEl.textContent = '✓';
+                if (labelEl) labelEl.textContent = 'No Pain Logged';
+                return;
+            }
+            const startOfDay = d => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x.getTime(); };
+            const days = Math.max(0, Math.round((startOfDay(Date.now()) - startOfDay(Math.max(...times))) / 86400000));
+            valueEl.textContent = String(days);
+            if (labelEl) labelEl.textContent = days === 1 ? 'Day Pain-Free' : 'Days Pain-Free';
+        }
+
         function updateUI() {
             const child = getCurrentChild();
             if (!child) return;
@@ -4828,7 +4854,9 @@
             // Update stats
             document.getElementById('todayMeds').textContent = child.todayMeds;
             document.getElementById('waterIntake').textContent = child.waterIntake;
-            document.getElementById('daysPainFree').textContent = child.daysPainFree;
+            // Computed from the log. The stored daysPainFree was never updated
+            // anywhere, so every profile showed a flat "0 pain-free" from day one.
+            renderPainFreeStat(child);
             
             // Render sections
             renderMedications();
@@ -6569,10 +6597,10 @@
                                 margin-bottom:8px;font-family:'Sora',sans-serif;">
                         Adults
                     </div>
-                    <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-bottom:12px;">
+                    <div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;margin-bottom:12px;">
                         ${adultEmojiOptions.map(emoji => `
                             <button type="button" onclick="selectChildIcon('${emoji}')"
-                                style="font-size:26px;padding:8px;
+                                style="font-size:24px;padding:8px 0;width:100%;line-height:1.2;
                                        border:2px solid ${child.emoji === emoji && !child.photo ? 'var(--primary)' : 'var(--border)'};
                                        border-radius:12px;
                                        background:${child.emoji === emoji && !child.photo ? 'var(--primary-faint)' : 'white'};
@@ -6587,11 +6615,11 @@
                         All options
                     </div>` : ''}
 
-                    <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;margin-bottom:20px;" id="iconEmojiGrid">
+                    <div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin-bottom:20px;" id="iconEmojiGrid">
                         ${emojiOptions.map(emoji => `
                             <button type="button" onclick="selectChildIcon('${emoji}')"
-                                style="font-size:${child.selfTracking ? 22 : 28}px;
-                                       padding:${child.selfTracking ? 7 : 10}px;
+                                style="font-size:${child.selfTracking ? 22 : 26}px;
+                                       padding:8px 0;width:100%;
                                        border:2px solid ${child.emoji === emoji && !child.photo ? 'var(--primary)' : 'var(--border)'};
                                        border-radius:12px;
                                        background:${child.emoji === emoji && !child.photo ? 'var(--primary-faint)' : 'white'};
@@ -6705,8 +6733,7 @@
                     <div style="background: var(--bg); padding: 16px; border-radius: 12px; margin-bottom: 16px;">
                         <div style="font-weight: 600; margin-bottom: 12px;">App Information</div>
                         <div style="font-size: 13px; color: var(--text-light); line-height: 1.6;">
-                            <strong>SickleStrong v1.0 (Beta)</strong><br>
-                            Testing Phase<br>
+                            <strong>SickleStrong</strong> · Founding family beta<br>
                             ${appData.children.length} child${appData.children.length > 1 ? 'ren' : ''} registered<br>
                             ${appData.contacts.length} emergency contact${appData.contacts.length > 1 ? 's' : ''}
                         </div>

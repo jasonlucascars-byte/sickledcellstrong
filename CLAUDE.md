@@ -38,6 +38,7 @@ node tests/emergency-medical-record.test.mjs # 22 checks — emergency fields + 
 node tests/delete-account.test.mjs           # 16 checks — in-app account deletion
 node tests/sign-out.test.mjs                 # 15 checks — sign out clears the phone safely
 node tests/offline-sync.test.mjs             # 27 checks — outbox retry + sync merge
+node tests/first-run.test.mjs                # 18 checks — setup wording, phone layout, honest copy
 ```
 
 Tests are plain `.mjs` scripts run directly by Node — there is no test runner,
