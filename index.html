@@ -2325,6 +2325,13 @@
                                 style="opacity:0.5;">
                             Get Started →
                         </button>
+
+                        <!-- A returning parent on a new or signed-out phone must not be
+                             pushed through setup again: signing in restores their family. -->
+                        <button type="button" class="btn btn-secondary btn-full" style="margin-top:10px;"
+                                onclick="openSignIn()">
+                            I already have an account
+                        </button>
                     </div>
                 `
             },
@@ -6729,6 +6736,9 @@
                     
                     <button class="btn btn-primary btn-full" style="margin-bottom: 10px;" onclick="saveSettings()">Save Changes</button>
                     
+                    <!-- Filled in after the session check: only shown when signed in. -->
+                    <div id="settingsAccountRow"></div>
+
                     <div style="border-top: 1px solid var(--border); padding-top: 16px; margin-top: 16px;">
                         <button class="btn btn-secondary btn-full" style="margin-bottom: 10px;" onclick="exportAllData()">📥 Export All Data</button>
                         <button class="btn btn-full" style="background: var(--emergency);" onclick="clearAllData()">🗑️ Clear All Data</button>
@@ -6741,8 +6751,33 @@
                 </div>
             `;
             document.body.appendChild(modal);
+            renderSettingsAccountRow(modal);
         }
-        
+
+        // Settings is built synchronously; the session check isn't, so the
+        // account row fills in a moment later and only for a signed-in user.
+        async function renderSettingsAccountRow(modal) {
+            let session = null;
+            try { ({ data: { session } } = await sb.auth.getSession()); } catch (e) {}
+            const row = modal.querySelector('#settingsAccountRow');
+            const email = session?.user?.email;
+            if (!row || !email) return;
+
+            row.style.cssText = 'background:var(--bg);padding:16px;border-radius:12px;margin-bottom:16px;';
+            const label = document.createElement('div');
+            label.style.cssText = 'font-weight:600;margin-bottom:4px;';
+            label.textContent = 'Account';
+            const who = document.createElement('div');
+            who.style.cssText = 'font-size:13px;color:var(--text-light);margin-bottom:12px;word-break:break-all;';
+            who.textContent = `Signed in as ${email}`;
+            const btn = document.createElement('button');
+            btn.className = 'btn btn-secondary btn-full';
+            btn.id = 'signOutBtn';
+            btn.textContent = 'Sign out';
+            btn.addEventListener('click', () => { modal.remove(); showSignOut(); });
+            row.append(label, who, btn);
+        }
+
         function saveSettings() {
             appData.parentName = document.getElementById('settingsParentName').value.trim();
             appData.parentRelation = document.getElementById('settingsParentRelation').value.trim();
@@ -7420,17 +7455,30 @@
             }
         }
 
+        // Sign-out clears this phone, so it has to know whether everything
+        // here actually reached the cloud. Writes are fire-and-forget with no
+        // retry queue: one that fails (or is attempted offline) exists only
+        // on this device. Track writes still running, and remember — across
+        // reloads — that one failed, so sign-out can warn before erasing it.
+        let _cloudWritesInFlight = 0;
+        function markUnsynced() {
+            try { localStorage.setItem('ss_unsynced', '1'); } catch (e) {}
+        }
+
         function cloudSync(fn) {
             // Fire-and-forget async cloud write — never blocks the UI.
             // supabase-js resolves with { error } rather than throwing for a
             // rejected write, so the resolved value has to be inspected too;
             // .catch() alone would never see a permission denial.
+            if (cloudIsOffline()) markUnsynced();
+            _cloudWritesInFlight++;
             Promise.resolve()
                 .then(fn)
                 .then(result => {
-                    if (result && result.error) reportCloudWriteError(result.error);
+                    if (result && result.error) { markUnsynced(); reportCloudWriteError(result.error); }
                 })
-                .catch(reportCloudWriteError);
+                .catch(err => { markUnsynced(); reportCloudWriteError(err); })
+                .finally(() => { _cloudWritesInFlight--; });
         }
 
         // ── SUPABASE LOAD (on login / session restore) ────────────────────
@@ -8483,6 +8531,13 @@
 
             closeAuthScreen();
             await syncAllFromCloud();
+            // Signing in from the setup wizard (a returning parent on a new or
+            // signed-out phone): the cloud just restored their family, so leave
+            // the wizard rather than leave it covering the app.
+            if (appData.setupComplete) {
+                document.getElementById('setupWizard')?.classList.remove('active');
+                updateUI();
+            }
             updateFamilyMembersPreview();
 
             if (invitedChildName) {
@@ -8826,6 +8881,13 @@
 
             closeAuthScreen();
             await syncAllFromCloud();
+            // Signing in from the setup wizard (a returning parent on a new or
+            // signed-out phone): the cloud just restored their family, so leave
+            // the wizard rather than leave it covering the app.
+            if (appData.setupComplete) {
+                document.getElementById('setupWizard')?.classList.remove('active');
+                updateUI();
+            }
             updateFamilyMembersPreview();
             trackFamilyMemberJoined();
 
@@ -8968,6 +9030,13 @@
             document.getElementById('authScreen').classList.remove('active');
             const mainApp = document.getElementById('mainApp');
             if (mainApp) mainApp.style.display = 'block';
+        }
+
+        function openSignIn() {
+            const authScreen = document.getElementById('authScreen');
+            if (!authScreen) return;
+            switchAuthTab('login');
+            authScreen.classList.add('active');
         }
 
         // A member's display name can be missing (an invitee who confirmed
@@ -9563,6 +9632,87 @@
                     </p>
                     <button class="btn btn-primary btn-full" onclick="location.reload()">Done</button>
                 `;
+            });
+        }
+
+        // Sign out clears this phone: on a shared or borrowed phone, leaving a
+        // child's health records behind for the next person is the failure
+        // that matters. Everything synced comes back at the next sign-in, so
+        // the only real risk is an entry that never reached the cloud — hence
+        // the offline block, the wait for in-flight writes, and the warning
+        // (with an export) when a write is known to have failed.
+        async function showSignOut() {
+            const modal = document.createElement('div');
+            modal.className = 'modal active';
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width:420px;">
+                    <button class="modal-close" onclick="this.closest('.modal').remove()">×</button>
+                    <div class="modal-title">Sign out?</div>
+                    <p style="font-size:14px;line-height:1.6;margin-bottom:10px;">
+                        Signing out removes your family's information from this phone. Sign back in any time
+                        and everything saved to your account comes right back.
+                    </p>
+                    <p style="font-size:13px;line-height:1.6;color:var(--text-light);margin-bottom:14px;">
+                        Photos on pain entries and profile pictures are kept only on this phone, so they won't come back.
+                    </p>
+                    <div id="signOutWarning" role="alert" style="display:none;font-size:13px;line-height:1.6;
+                         background:var(--warning-light);color:#7a4a00;border-radius:12px;padding:12px 14px;margin-bottom:12px;"></div>
+                    <button class="btn btn-secondary btn-full" id="signOutExportBtn" style="display:none;margin-bottom:8px;">📥 Export a copy first</button>
+                    <button class="btn btn-primary btn-full" id="signOutConfirmBtn" style="margin-bottom:8px;">Sign out</button>
+                    <button class="btn btn-secondary btn-full" onclick="this.closest('.modal').remove()">Cancel</button>
+                </div>
+            `;
+            document.body.appendChild(modal);
+
+            const warn = modal.querySelector('#signOutWarning');
+            const confirmBtn = modal.querySelector('#signOutConfirmBtn');
+            const exportBtn = modal.querySelector('#signOutExportBtn');
+            const showWarn = (msg) => { warn.textContent = msg; warn.style.display = 'block'; };
+            exportBtn.addEventListener('click', () => exportAllData());
+
+            let unsynced = false;
+            try { unsynced = localStorage.getItem('ss_unsynced') === '1'; } catch (e) {}
+            if (unsynced) {
+                showWarn('Some entries on this phone may not have reached your account (for example, ones logged while offline). ' +
+                    'Signing out would erase them. Export a copy first if you want to keep them.');
+                exportBtn.style.display = 'block';
+                confirmBtn.textContent = 'Sign out anyway';
+            }
+
+            confirmBtn.addEventListener('click', async () => {
+                if (cloudIsOffline()) {
+                    showWarn("You're offline. Connect to the internet before signing out, so nothing you've logged is lost.");
+                    return;
+                }
+                confirmBtn.disabled = true;
+                confirmBtn.textContent = 'Signing out…';
+
+                // Let any save that's still on its way finish (up to ~8s).
+                for (let i = 0; i < 40 && _cloudWritesInFlight > 0; i++) {
+                    await new Promise(r => setTimeout(r, 200));
+                }
+                let nowUnsynced = false;
+                try { nowUnsynced = localStorage.getItem('ss_unsynced') === '1'; } catch (e) {}
+                if ((_cloudWritesInFlight > 0 || nowUnsynced) && !unsynced) {
+                    // Something just failed or is stuck: stop and let them choose.
+                    unsynced = true;
+                    confirmBtn.disabled = false;
+                    confirmBtn.textContent = 'Sign out anyway';
+                    exportBtn.style.display = 'block';
+                    showWarn('Your latest entries are still saving or didn\'t reach your account. ' +
+                        'Wait a moment and try again, or export a copy first.');
+                    return;
+                }
+
+                trackEvent('signed_out');
+                try { await sb.auth.signOut({ scope: 'local' }); } catch (e) {}
+                try {
+                    Object.keys(localStorage)
+                        .filter(k => k === 'sickleStrongData' || k === 'ss_auth' || k === 'ss_auth_dismissed'
+                                  || k === 'ss_unsynced' || k.startsWith('sb-'))
+                        .forEach(k => localStorage.removeItem(k));
+                } catch (e) {}
+                location.reload();
             });
         }
 

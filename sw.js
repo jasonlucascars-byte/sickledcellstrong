@@ -3,7 +3,7 @@
 // Enables offline access + installability
 // ============================================================
 // Bump this version with every deploy to force cache refresh:
-const CACHE_VERSION = 'sicklestrong-v10';
+const CACHE_VERSION = 'sicklestrong-v11';
 
 const APP_SHELL = [
   '/',

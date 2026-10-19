@@ -36,6 +36,7 @@ node tests/xss-escaping.test.mjs             # 19 checks — render-site escapin
 node tests/storage-resilience.test.mjs       # 11 checks — photo size + save failure
 node tests/emergency-medical-record.test.mjs # 22 checks — emergency fields + ER flag
 node tests/delete-account.test.mjs           # 16 checks — in-app account deletion
+node tests/sign-out.test.mjs                 # 15 checks — sign out clears the phone safely
 ```
 
 Tests are plain `.mjs` scripts run directly by Node — there is no test runner,
@@ -70,8 +71,10 @@ inspects the resolved value and is the only place a user learns their cloud
 copy didn't save.
 
 Other `localStorage` keys: `ss_auth` (session mirror), `ss_auth_dismissed`
-(suppresses the account prompt), `ss_install_dismissed`, and `ss_accounts` — a
-**read-only legacy** pre-Supabase account store; nothing writes it.
+(suppresses the account prompt), `ss_install_dismissed`, `ss_unsynced` (set
+when a cloud write fails or runs offline — sign-out warns before erasing such
+entries, since there is no retry queue), and `ss_accounts` — a **read-only
+legacy** pre-Supabase account store; nothing writes it.
 
 Two storage invariants, both fixing real data loss — don't undo either:
 
