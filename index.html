@@ -1989,6 +1989,7 @@
                     By creating an account, you confirm you're 18 or older and agree to our
                     <a href="https://sicklestrong-landing-v2.netlify.app/privacy.html" target="_blank" rel="noopener" style="color:var(--primary);">Privacy Policy</a>.
                     Only people you invite to a child can see that child's records.
+                    <br><br>Age 13 to 17? Ask your parent or guardian to invite you from Family &amp; Sharing.
                 </p>
 
                 <!-- Skip for existing localStorage users -->
@@ -8492,6 +8493,10 @@
                         </label>
                     </div>
 
+                    <div style="font-size:12px;color:var(--text-light);line-height:1.6;background:var(--primary-faint);border-radius:10px;padding:10px 12px;margin-bottom:14px;">
+                        💙 <strong>Inviting your teen (13–17) to their own profile?</strong> Choose Caregiver,
+                        and Can Report Pain &amp; Fever or Full Access. They make their own login on their own phone.
+                    </div>
                     <div id="inviteError" style="display:none;font-size:13px;color:var(--emergency);margin-bottom:10px;"></div>
                     <button class="btn btn-primary btn-full" id="inviteGenerate">Create invite link</button>
                 </div>
@@ -9171,8 +9176,16 @@
                         <label class="input-label">Create a Password</label>
                         <input type="password" class="input-field" id="invitePassword" placeholder="8+ characters, a capital and a number" autocomplete="new-password" />
                     </div>
+                    <div class="input-group">
+                        <label class="input-label">Your age</label>
+                        <div id="inviteAge" style="display:flex;gap:8px;flex-wrap:wrap;">
+                            <label class="invite-choice" style="flex:1;min-width:110px;"><input type="radio" name="inviteAge" value="adult" /> <span>18 or older</span></label>
+                            <label class="invite-choice" style="flex:1;min-width:110px;"><input type="radio" name="inviteAge" value="teen" /> <span>13 to 17</span></label>
+                            <label class="invite-choice" style="flex:1;min-width:110px;"><input type="radio" name="inviteAge" value="child" /> <span>Under 13</span></label>
+                        </div>
+                    </div>
                     <div id="inviteSignupError" style="display:none;font-size:13px;color:var(--emergency);margin-bottom:10px;"></div>
-                    <p style="font-size:12px;color:var(--text-light);margin:0 0 10px;">By accepting, you confirm you're 18 or older and agree to our <a href="https://sicklestrong-landing-v2.netlify.app/privacy.html" target="_blank" rel="noopener" style="color:var(--primary);">Privacy Policy</a>.</p>
+                    <p style="font-size:12px;color:var(--text-light);margin:0 0 10px;">By accepting, you confirm you're 13 or older (under 18 only when a parent or guardian invited you) and agree to our <a href="https://sicklestrong-landing-v2.netlify.app/privacy.html" target="_blank" rel="noopener" style="color:var(--primary);">Privacy Policy</a>.</p>
                     <button class="btn btn-primary btn-full" id="inviteSignupSubmit">Accept invite 💙</button>
                     <button class="btn btn-secondary btn-full" style="margin-top:8px;" id="inviteSignIn">I already have an account</button>
                 </div>
@@ -9212,8 +9225,17 @@
                 button.textContent = 'Accept invite 💙';
             };
 
+            // Teens 13–17 may join through an invite: only a parent of the child
+            // can create one (generate_child_invite checks it), so a parent is
+            // always the one letting them in. Under 13 never gets an account
+            // (COPPA); a parent logs for them instead.
+            const age = modal.querySelector('input[name="inviteAge"]:checked')?.value;
             if (!name) return showError('Please enter your name.');
             if (!/^\S+@\S+\.\S+$/.test(email)) return showError('Please enter a valid email address.');
+            if (!age) return showError('Please choose your age.');
+            if (age === 'child') {
+                return showError("SickleStrong accounts start at 13. Your parent or guardian can keep logging for you on their phone, and you can join when you turn 13.");
+            }
             const pwProblem = passwordProblem(password);
             if (pwProblem) return showError(pwProblem);
 
@@ -9223,7 +9245,8 @@
 
             const { data, error } = await sb.auth.signUp({
                 email, password,
-                options: { data: { full_name: name, role: 'caregiver', pending_invite_code: code }, emailRedirectTo: APP_URL }
+                options: { data: { full_name: name, role: 'caregiver', pending_invite_code: code,
+                                   age_band: age === 'teen' ? '13-17' : '18+' }, emailRedirectTo: APP_URL }
             });
             if (error) return showError(error.message);
 

@@ -39,6 +39,7 @@ node tests/delete-account.test.mjs           # 16 checks — in-app account dele
 node tests/sign-out.test.mjs                 # 15 checks — sign out clears the phone safely
 node tests/offline-sync.test.mjs             # 27 checks — outbox retry + sync merge
 node tests/first-run.test.mjs                # 20 checks — setup wording, phone layout, honest copy
+node tests/teen-access.test.mjs              # 11 checks — 13–17 join by parent invite; under 13 blocked
 ```
 
 Tests are plain `.mjs` scripts run directly by Node — there is no test runner,
@@ -137,6 +138,13 @@ Permission tiers are `view` < `report` < `full` (`PERMISSION_RANK`), held
 on a control (hidden by `applyPermissionGating()`, which re-runs from
 `updateUI()` when the active child changes). The `report` tier exists for the
 least-trusted helpers — it allows logging pain and temperature and nothing else.
+
+Ages: family sign-up is 18+. Teens 13–17 may join **only through a child
+invite** (the invite sign-up asks their age and records `age_band` on the auth
+user's metadata); that is acceptable because `generate_child_invite` lets only
+a parent of that child create an invite. Under 13 never gets an account
+(COPPA). The privacy policy (landing repo, section 2) states these rules, so
+change both together.
 
 **Database work is out of band.** The RPCs the frontend calls
 (`provision_current_user`, `redeem_child_invite`, `generate_child_invite`,
