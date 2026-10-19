@@ -65,6 +65,59 @@ $function$
 -- SECURITY DEFINER RPCs — the only way access is ever granted
 -- ============================================================
 
+CREATE OR REPLACE FUNCTION public.approve_teen_request(p_code text, p_child_id uuid, p_permission text DEFAULT 'report'::text)
+ RETURNS TABLE(out_child_name text, out_teen_name text)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_uid uuid := auth.uid();
+  r     public.teen_signup_requests%ROWTYPE;
+  v_me  text;
+BEGIN
+  IF v_uid IS NULL THEN RAISE EXCEPTION 'NOT_AUTHENTICATED'; END IF;
+  IF p_permission NOT IN ('full','report','view') THEN RAISE EXCEPTION 'INVALID_PERMISSION'; END IF;
+  SELECT * INTO r FROM public.teen_signup_requests WHERE code = upper(trim(p_code)) FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'REQUEST_NOT_FOUND'; END IF;
+  IF r.status <> 'pending' THEN RAISE EXCEPTION 'REQUEST_ALREADY_USED'; END IF;
+  IF r.expires_at <= now() THEN RAISE EXCEPTION 'REQUEST_EXPIRED'; END IF;
+  SELECT lower(email) INTO v_me FROM auth.users WHERE id = v_uid;
+  IF v_me IS DISTINCT FROM r.parent_email THEN RAISE EXCEPTION 'NOT_THE_NAMED_PARENT'; END IF;
+  IF v_uid = r.teen_auth_id THEN RAISE EXCEPTION 'NOT_THE_NAMED_PARENT'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.child_access
+                 WHERE child_id = p_child_id AND auth_id = v_uid AND circle_role = 'parent') THEN
+    RAISE EXCEPTION 'NOT_A_PARENT_FOR_THIS_CHILD';
+  END IF;
+
+  INSERT INTO public.child_access (child_id, auth_id, permission, circle_role, invited_by)
+  VALUES (p_child_id, r.teen_auth_id, p_permission, 'caregiver', v_uid)
+  ON CONFLICT (child_id, auth_id) DO UPDATE SET permission = EXCLUDED.permission;
+
+  UPDATE public.teen_signup_requests
+     SET status = 'approved', child_id = p_child_id, approved_by = v_uid
+   WHERE id = r.id;
+
+  out_child_name := (SELECT name FROM public.children WHERE id = p_child_id);
+  out_teen_name := r.teen_name;
+  RETURN NEXT;
+END;
+$function$
+
+CREATE OR REPLACE FUNCTION public.block_teen_child_insert()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+BEGIN
+  IF auth.uid() IS NOT NULL AND public.is_teen_account(auth.uid()) THEN
+    RAISE EXCEPTION 'TEEN_NEEDS_PARENT';
+  END IF;
+  RETURN NEW;
+END;
+$function$
+
 CREATE OR REPLACE FUNCTION public.cancel_child_invite(p_invite_id uuid)
  RETURNS void
  LANGUAGE plpgsql
@@ -88,6 +141,49 @@ BEGIN
 
   UPDATE public.child_invites SET revoked_at = now()
   WHERE id = p_invite_id AND revoked_at IS NULL;
+END;
+$function$
+
+CREATE OR REPLACE FUNCTION public.create_teen_request(p_parent_email text)
+ RETURNS TABLE(out_code text, out_parent_email text)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_uid   uuid := auth.uid();
+  v_email text := lower(trim(coalesce(p_parent_email, '')));
+  v_own   text;
+  v_name  text;
+  v_code  text;
+  i       int;
+BEGIN
+  IF v_uid IS NULL THEN RAISE EXCEPTION 'NOT_AUTHENTICATED'; END IF;
+  IF NOT public.is_teen_account(v_uid) THEN RAISE EXCEPTION 'NOT_A_TEEN_ACCOUNT'; END IF;
+  IF v_email !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' THEN RAISE EXCEPTION 'PARENT_EMAIL_INVALID'; END IF;
+  SELECT lower(email), raw_user_meta_data->>'full_name' INTO v_own, v_name FROM auth.users WHERE id = v_uid;
+  IF v_email = v_own THEN RAISE EXCEPTION 'PARENT_EMAIL_IS_OWN'; END IF;
+
+  UPDATE public.teen_signup_requests SET status = 'cancelled'
+   WHERE teen_auth_id = v_uid AND status = 'pending' AND expires_at <= now();
+
+  UPDATE public.teen_signup_requests SET parent_email = v_email
+   WHERE teen_auth_id = v_uid AND status = 'pending'
+   RETURNING code INTO v_code;
+  IF v_code IS NOT NULL THEN
+    out_code := v_code; out_parent_email := v_email; RETURN NEXT; RETURN;
+  END IF;
+
+  FOR i IN 1..10 LOOP
+    v_code := 'TEEN-' || upper(substr(md5(random()::text || clock_timestamp()::text), 1, 8));
+    BEGIN
+      INSERT INTO public.teen_signup_requests (teen_auth_id, teen_name, parent_email, code)
+      VALUES (v_uid, v_name, v_email, v_code);
+      out_code := v_code; out_parent_email := v_email; RETURN NEXT; RETURN;
+    EXCEPTION WHEN unique_violation THEN
+      IF i = 10 THEN RAISE EXCEPTION 'Could not allocate a request code'; END IF;
+    END;
+  END LOOP;
 END;
 $function$
 
@@ -279,6 +375,15 @@ BEGIN
 END;
 $function$
 
+CREATE OR REPLACE FUNCTION public.is_teen_account(p_uid uuid)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+  SELECT coalesce((SELECT raw_user_meta_data->>'age_band' FROM auth.users WHERE id = p_uid), '') = '13-17';
+$function$
+
 CREATE OR REPLACE FUNCTION public.lookup_family_by_code(p_code text)
  RETURNS TABLE(out_family_id uuid, out_family_code text)
  LANGUAGE sql
@@ -288,6 +393,30 @@ AS $function$
   SELECT id, family_code FROM public.families
   WHERE family_code = upper(trim(p_code)) AND is_active = true
   LIMIT 1;
+$function$
+
+CREATE OR REPLACE FUNCTION public.lookup_teen_request(p_code text)
+ RETURNS TABLE(out_teen_name text, out_status text, out_expired boolean, out_email_matches boolean, out_parent_email_hint text)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_uid uuid := auth.uid();
+  r     public.teen_signup_requests%ROWTYPE;
+  v_me  text;
+BEGIN
+  IF v_uid IS NULL THEN RAISE EXCEPTION 'NOT_AUTHENTICATED'; END IF;
+  SELECT * INTO r FROM public.teen_signup_requests WHERE code = upper(trim(p_code));
+  IF NOT FOUND THEN RAISE EXCEPTION 'REQUEST_NOT_FOUND'; END IF;
+  SELECT lower(email) INTO v_me FROM auth.users WHERE id = v_uid;
+  out_teen_name := r.teen_name;
+  out_status := r.status;
+  out_expired := r.expires_at <= now();
+  out_email_matches := (v_me = r.parent_email);
+  out_parent_email_hint := left(r.parent_email, 1) || '•••@' || split_part(r.parent_email, '@', 2);
+  RETURN NEXT;
+END;
 $function$
 
 CREATE OR REPLACE FUNCTION public.prevent_last_parent_removal()
@@ -698,6 +827,7 @@ CREATE POLICY symptoms_write ON public.symptoms
   FOR ALL TO public
   USING ((child_id IN ( SELECT full_access_child_ids() AS full_access_child_ids)))
   WITH CHECK ((child_id IN ( SELECT full_access_child_ids() AS full_access_child_ids)));
+ALTER TABLE public.teen_signup_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.temperature_logs ENABLE ROW LEVEL SECURITY;
 CREATE POLICY temperature_logs_delete ON public.temperature_logs
   FOR DELETE TO public
