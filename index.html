@@ -2005,7 +2005,9 @@
                 </div>
 
                 <p style="text-align:center;font-size:12px;color:var(--text-light);margin-top:16px;">
-                    Your data is encrypted and private. Only your family can see it.
+                    By creating an account, you confirm you're 18 or older and agree to our
+                    <a href="https://sicklestrong-landing-v2.netlify.app/privacy.html" target="_blank" rel="noopener" style="color:var(--primary);">Privacy Policy</a>.
+                    Only people you invite to a child can see that child's records.
                 </p>
 
                 <!-- Skip for existing localStorage users -->
@@ -6730,6 +6732,11 @@
                     <div style="border-top: 1px solid var(--border); padding-top: 16px; margin-top: 16px;">
                         <button class="btn btn-secondary btn-full" style="margin-bottom: 10px;" onclick="exportAllData()">📥 Export All Data</button>
                         <button class="btn btn-full" style="background: var(--emergency);" onclick="clearAllData()">🗑️ Clear All Data</button>
+                        <p style="font-size: 13px; color: var(--text-light); line-height: 1.6; margin-top: 14px; text-align: center;">
+                            <a href="https://sicklestrong-landing-v2.netlify.app/privacy.html" target="_blank" rel="noopener" style="color: var(--primary);">Privacy Policy</a>
+                            &nbsp;·&nbsp;
+                            <a href="mailto:hello@sicklestrong.app?subject=Delete%20my%20SickleStrong%20account" style="color: var(--primary);">Delete my account</a>
+                        </p>
                     </div>
                 </div>
             `;
@@ -8885,6 +8892,7 @@
                         <input type="password" class="input-field" id="invitePassword" placeholder="8+ characters, a capital and a number" autocomplete="new-password" />
                     </div>
                     <div id="inviteSignupError" style="display:none;font-size:13px;color:var(--emergency);margin-bottom:10px;"></div>
+                    <p style="font-size:12px;color:var(--text-light);margin:0 0 10px;">By accepting, you confirm you're 18 or older and agree to our <a href="https://sicklestrong-landing-v2.netlify.app/privacy.html" target="_blank" rel="noopener" style="color:var(--primary);">Privacy Policy</a>.</p>
                     <button class="btn btn-primary btn-full" id="inviteSignupSubmit">Accept invite 💙</button>
                     <button class="btn btn-secondary btn-full" style="margin-top:8px;" id="inviteSignIn">I already have an account</button>
                 </div>
