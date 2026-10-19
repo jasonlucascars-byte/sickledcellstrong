@@ -6735,7 +6735,7 @@
                         <p style="font-size: 13px; color: var(--text-light); line-height: 1.6; margin-top: 14px; text-align: center;">
                             <a href="https://sicklestrong-landing-v2.netlify.app/privacy.html" target="_blank" rel="noopener" style="color: var(--primary);">Privacy Policy</a>
                             &nbsp;·&nbsp;
-                            <a href="mailto:hello@sicklestrong.app?subject=Delete%20my%20SickleStrong%20account" style="color: var(--primary);">Delete my account</a>
+                            <a href="#" style="color: var(--primary);" onclick="event.preventDefault(); this.closest('.modal').remove(); showDeleteAccount();">Delete my account</a>
                         </p>
                     </div>
                 </div>
@@ -9452,6 +9452,120 @@
             localStorage.removeItem('sickleStrongData');
             location.reload();
         }
+
+        // In-app account deletion (App Store guideline 5.1.1(v) requires it for
+        // any app with sign-up). The server side is the delete_my_account() RPC,
+        // which refuses with SOLE_PARENT_OF_CHILDREN (DETAIL = their names) when
+        // the caller is a child's only parent — a child must never be left with
+        // no one who can manage them. Entries this person logged on children who
+        // stay are kept with the author removed.
+        async function showDeleteAccount() {
+            const { data: { session } } = await sb.auth.getSession();
+            const signedIn = !!session?.user?.email;
+
+            const modal = document.createElement('div');
+            modal.className = 'modal active';
+            modal.innerHTML = signedIn ? `
+                <div class="modal-content" style="max-width:440px;">
+                    <button class="modal-close" onclick="this.closest('.modal').remove()">×</button>
+                    <div class="modal-title">Delete my account</div>
+                    <p style="font-size:14px;line-height:1.6;margin-bottom:10px;">This permanently deletes your SickleStrong account:</p>
+                    <ul style="font-size:13px;line-height:1.7;color:var(--text-light);margin:0 0 12px 18px;">
+                        <li>You will no longer be able to sign in.</li>
+                        <li>You lose access to every child you were sharing.</li>
+                        <li>Entries you added for a child who has another parent stay in that child's history, without your name.</li>
+                        <li>SickleStrong is cleared from this device.</li>
+                    </ul>
+                    <p style="font-size:13px;line-height:1.6;margin-bottom:14px;">
+                        <strong>This cannot be undone.</strong> Want a copy first? Close this and use Export All Data in Settings.
+                    </p>
+                    <div class="input-group">
+                        <label class="input-label">Enter your password to confirm</label>
+                        <input type="password" class="input-field" id="deleteAccountPassword" autocomplete="current-password" />
+                    </div>
+                    <div id="deleteAccountError" role="alert" style="display:none;font-size:13px;line-height:1.6;color:var(--emergency);margin-bottom:10px;"></div>
+                    <button class="btn btn-full" id="deleteAccountBtn" style="background:var(--emergency);color:#fff;margin-bottom:8px;">Delete my account permanently</button>
+                    <button class="btn btn-secondary btn-full" onclick="this.closest('.modal').remove()">Cancel</button>
+                </div>
+            ` : `
+                <div class="modal-content" style="max-width:420px;">
+                    <button class="modal-close" onclick="this.closest('.modal').remove()">×</button>
+                    <div class="modal-title">Delete my account</div>
+                    <p style="font-size:14px;line-height:1.6;margin-bottom:14px;">
+                        You're not signed in to an account on this device, so your information is stored only here.
+                        To erase it, use <strong>Clear All Data</strong> in Settings.
+                    </p>
+                    <p style="font-size:13px;line-height:1.6;color:var(--text-light);margin-bottom:14px;">
+                        If you do have an account, sign in first and then come back here.
+                    </p>
+                    <button class="btn btn-secondary btn-full" onclick="this.closest('.modal').remove()">Close</button>
+                </div>
+            `;
+            document.body.appendChild(modal);
+            if (!signedIn) return;
+
+            const btn = modal.querySelector('#deleteAccountBtn');
+            const errorEl = modal.querySelector('#deleteAccountError');
+            const showError = (msg) => { errorEl.textContent = msg; errorEl.style.display = 'block'; };
+
+            btn.addEventListener('click', async () => {
+                errorEl.style.display = 'none';
+                const password = modal.querySelector('#deleteAccountPassword').value;
+                if (!password) { showError('Please enter your password.'); return; }
+                if (cloudIsOffline() || !navigator.onLine) {
+                    showError('You appear to be offline. Reconnect and try again.');
+                    return;
+                }
+
+                btn.disabled = true;
+                btn.textContent = 'Deleting…';
+                const resetBtn = () => { btn.disabled = false; btn.textContent = 'Delete my account permanently'; };
+
+                // Re-check the password so an unlocked phone left on the table
+                // can't be used to erase someone's account.
+                const { error: authErr } = await sb.auth.signInWithPassword({ email: session.user.email, password });
+                if (authErr) {
+                    resetBtn();
+                    showError("That password didn't match. Please try again.");
+                    return;
+                }
+
+                const { error } = await sb.rpc('delete_my_account');
+                if (error) {
+                    resetBtn();
+                    if ((error.message || '').includes('SOLE_PARENT_OF_CHILDREN')) {
+                        const names = error.details || 'a child';
+                        showError(`You're the only parent for ${names}. Before deleting your account, ` +
+                            `invite another parent in Family & Sharing, or delete that child's profile there ` +
+                            `(Delete permanently). Then try again.`);
+                    } else {
+                        console.warn('[SickleStrong] delete account failed', error);
+                        showError("We couldn't delete your account just now. Please try again, or email hello@sicklestrong.app.");
+                    }
+                    return;
+                }
+
+                trackEvent('account_deleted');
+                // The auth user is already gone server-side, so signOut may
+                // error; that's fine — local state is cleared either way.
+                try { await sb.auth.signOut({ scope: 'local' }); } catch (e) {}
+                try {
+                    Object.keys(localStorage)
+                        .filter(k => k === 'sickleStrongData' || k.startsWith('ss_') || k.startsWith('sb-'))
+                        .forEach(k => localStorage.removeItem(k));
+                } catch (e) {}
+
+                modal.querySelector('.modal-content').innerHTML = `
+                    <div class="modal-title">Your account has been deleted</div>
+                    <p style="font-size:14px;line-height:1.6;margin-bottom:16px;">
+                        Thank you for being part of SickleStrong. Your account and this device's copy are gone.
+                        Backup copies are erased automatically within 7 days.
+                    </p>
+                    <button class="btn btn-primary btn-full" onclick="location.reload()">Done</button>
+                `;
+            });
+        }
+
         function showAddSelf() {
             if (appData.children.length >= 5) {
                 alert('Maximum 5 profiles supported.'); return;

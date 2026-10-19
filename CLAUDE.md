@@ -35,6 +35,7 @@ python3 -c "import re;open('/tmp/c.js','w').write(re.search(r'<script>(.*?)</scr
 node tests/xss-escaping.test.mjs             # 19 checks — render-site escaping
 node tests/storage-resilience.test.mjs       # 11 checks — photo size + save failure
 node tests/emergency-medical-record.test.mjs # 22 checks — emergency fields + ER flag
+node tests/delete-account.test.mjs           # 16 checks — in-app account deletion
 ```
 
 Tests are plain `.mjs` scripts run directly by Node — there is no test runner,
@@ -116,7 +117,7 @@ least-trusted helpers — it allows logging pain and temperature and nothing els
 **Database work is out of band.** The RPCs the frontend calls
 (`provision_current_user`, `redeem_child_invite`, `generate_child_invite`,
 `lookup_family_by_code`, `switch_household`, `set_child_active_status`,
-`delete_child_permanently`, `cancel_child_invite`) and all RLS policies live in
+`delete_child_permanently`, `cancel_child_invite`, `delete_my_account`) and all RLS policies live in
 Supabase. There are **no migrations in git**. Do not attempt schema changes;
 assume the live database already provides them.
 

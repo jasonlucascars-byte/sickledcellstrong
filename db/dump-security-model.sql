@@ -56,6 +56,7 @@ rpcs as (
                       'generate_child_invite','cancel_child_invite',
                       'lookup_family_by_code','switch_household',
                       'set_child_active_status','delete_child_permanently',
+                      'delete_my_account',
                       'grant_owner_child_access','prevent_last_parent_removal')
 ),
 pols as (
