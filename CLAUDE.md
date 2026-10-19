@@ -37,6 +37,7 @@ node tests/storage-resilience.test.mjs       # 11 checks — photo size + save f
 node tests/emergency-medical-record.test.mjs # 22 checks — emergency fields + ER flag
 node tests/delete-account.test.mjs           # 16 checks — in-app account deletion
 node tests/sign-out.test.mjs                 # 15 checks — sign out clears the phone safely
+node tests/offline-sync.test.mjs             # 27 checks — outbox retry + sync merge
 ```
 
 Tests are plain `.mjs` scripts run directly by Node — there is no test runner,
@@ -58,10 +59,28 @@ the UI** and cloud writes are best-effort:
 
 - `appData` is one in-memory object (children, contacts, settings) persisted to
   `localStorage` under `sickleStrongData` via `saveData()` / `loadData()`.
-- Every mutation saves locally **first**, then fires a cloud write through
-  `cloudSync(fn)` — fire-and-forget, never blocking the UI, wrapped in
-  `_push*` helpers (`_pushPainLog`, `_pushMeds`, `_pushContact`, …).
-- `syncAllFromCloud()` pulls on login/session-restore and rebuilds `appData`.
+- Every mutation saves locally **first**. **Log entries** (pain, temperature,
+  symptom, weight, note, medication) then go through the **outbox**:
+  `queueCloudInsert(kind, entry)` — call it after pushing the entry into its
+  list and *before* `saveData()` — mints a permanent `entry.cloudId` (sent as
+  the row's `id`) and records `{kind, id}` under `ss_outbox`. `flushOutbox()`
+  sends queued entries (on queue, on the `online` event, and first thing in
+  `syncAllFromCloud`), marks them `synced`, and keeps them queued on network
+  failure. A duplicate-key reply means an earlier send landed and counts as
+  delivered; RLS or data rejections stop retrying and set `ss_unsynced`.
+  Other writes (child profile, contacts, hydration) still use fire-and-forget
+  `cloudSync(fn)` via `_push*` helpers.
+- `syncAllFromCloud()` pulls on login/session-restore and rebuilds `appData`,
+  then **`mergeLocalIntoCloud()`** puts back what only the phone has: queued
+  entries, never-uploaded legacy entries (matched to cloud rows by timestamp,
+  or medication name, and queued), device-only fields (`photo`, `resolved`,
+  `takenToday`, …), today's `waterIntake`/`todayMeds`, and children that never
+  reached the cloud. An entry marked `synced` (or carrying a cloud uuid) that
+  the cloud no longer has was removed by someone with access and stays gone.
+  Never replace this with a plain overwrite: that is the bug that silently
+  deleted offline pain crises. `tests/offline-sync.test.mjs` pins it.
+- Cloud timestamps are `timestamp without time zone` written as UTC; read
+  them through `cloudTime()`, or they display hours off.
 - Boot (`DOMContentLoaded`) wraps all cloud work in `try/catch` — a network
   failure must never stop the setup wizard or main app from rendering.
 
@@ -71,9 +90,10 @@ inspects the resolved value and is the only place a user learns their cloud
 copy didn't save.
 
 Other `localStorage` keys: `ss_auth` (session mirror), `ss_auth_dismissed`
-(suppresses the account prompt), `ss_install_dismissed`, `ss_unsynced` (set
-when a cloud write fails or runs offline — sign-out warns before erasing such
-entries, since there is no retry queue), and `ss_accounts` — a **read-only
+(suppresses the account prompt), `ss_install_dismissed`, `ss_outbox` (log
+entries waiting to upload — see above), `ss_unsynced` (set when a non-queued
+write fails or runs offline, or the cloud permanently rejects a queued one;
+sign-out warns before erasing either), and `ss_accounts` — a **read-only
 legacy** pre-Supabase account store; nothing writes it.
 
 Two storage invariants, both fixing real data loss — don't undo either:

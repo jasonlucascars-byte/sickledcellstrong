@@ -2834,9 +2834,9 @@
                 text: text
             };
             child.notes.push(note);
+            queueCloudInsert('note', note);
 
             saveData();
-            getCurrentFamilyId().then(fid => { if (fid) cloudSync(() => _pushNote(note, child.id, fid)); });
             renderNotes();
             document.querySelector('.modal').remove();
         }
@@ -3327,6 +3327,7 @@
             
             if (!child.painLog) child.painLog = [];
             child.painLog.push(painEntry);
+            queueCloudInsert('pain', painEntry);
 
             // Check for severe pain alert
             if (painEntry.level >= 7) {
@@ -3340,12 +3341,6 @@
 
             saveData();
             trackPainLogged();
-
-            // Cloud sync
-            (async () => {
-                const familyId = await getCurrentFamilyId();
-                if (familyId) await _pushPainLog(painEntry, child.id, familyId);
-            })();
             document.querySelector('.modal').remove();
             renderSymptomHistory();
         }
@@ -3404,16 +3399,11 @@
             if (!child.temperatureLog) child.temperatureLog = [];
             const tempEntry = { id: Date.now(), temperature, timestamp: new Date().toISOString() };
             child.temperatureLog.push(tempEntry);
+            queueCloudInsert('temp', tempEntry);
 
             saveData();
             trackTempLogged(temperature >= 101.3);
             document.querySelector('.modal').remove();
-
-            // Cloud sync
-            (async () => {
-                const familyId = await getCurrentFamilyId();
-                if (familyId) await _pushTempLog(tempEntry, child.id, familyId);
-            })();
             
             // Check for fever emergency
             if (temperature >= 101.3) {
@@ -3472,7 +3462,6 @@
             let hasEmergency = false;
             let emergencyChild = null;
             let emergencyTemp = 0;
-            const toSync = [];
 
             inputs.forEach(input => {
                 const childIndex = parseInt(input.dataset.childIndex);
@@ -3483,7 +3472,7 @@
                     if (!child.temperatureLog) child.temperatureLog = [];
                     const tempEntry = { id: Date.now() + childIndex, temperature, timestamp: new Date().toISOString() };
                     child.temperatureLog.push(tempEntry);
-                    toSync.push({ entry: tempEntry, childId: child.id });
+                    queueCloudInsert('temp', tempEntry);
                     trackTempLogged(temperature >= 101.3);
 
                     if (temperature >= 101.3) {
@@ -3495,9 +3484,6 @@
             });
 
             saveData();
-            getCurrentFamilyId().then(fid => {
-                if (fid) toSync.forEach(({ entry, childId }) => cloudSync(() => _pushTempLog(entry, childId, fid)));
-            });
             document.querySelector('.modal').remove();
             
             if (hasEmergency) {
@@ -3918,8 +3904,8 @@
 
             if (!child.symptoms) child.symptoms = [];
             child.symptoms.push(entry);
+            queueCloudInsert('symptom', entry);
             saveData();
-            getCurrentFamilyId().then(fid => { if (fid) cloudSync(() => _pushSymptom(entry, child.id, fid)); });
             trackSymptomLogged();
 
             // Flag if high severity or emergency symptoms
@@ -4178,9 +4164,12 @@
                         // didn't offer the child, with no explanation.
                         showToast(`${child.name}'s profile is saved on this device, but didn't reach the cloud. Sharing will be available once it syncs.`, 'warning');
                     }
-                    await _pushMeds(child.medications, child.id, familyId);
                 }
             })();
+            // Queued rather than sent now: the flush waits until the child itself
+            // has a cloud id, so the medications can't race ahead of it.
+            (child.medications || []).forEach(m => queueCloudInsert('med', m));
+            saveData();
             
             // Add hematologist to contacts if provided and not already added
             if (wizardData.hematologistName) {
@@ -5736,9 +5725,8 @@
             }
 
             if (!child.medications) child.medications = [];
-            medsToAdd.forEach(m => child.medications.push(m));
+            medsToAdd.forEach(m => { child.medications.push(m); queueCloudInsert('med', m); });
             saveData();
-            getCurrentFamilyId().then(fid => { if (fid) cloudSync(() => _pushMeds(medsToAdd, child.id, fid)); });
             document.querySelector('.modal.active')?.remove();
             updateUI();
 
@@ -6023,6 +6011,7 @@
             };
 
             child.weightHistory.push(entry);
+            queueCloudInsert('weight', entry);
             child.weight = weightInLbs;
 
             // Recalculate hydration goal
@@ -6031,7 +6020,6 @@
             }
 
             saveData();
-            getCurrentFamilyId().then(fid => { if (fid) cloudSync(() => _pushWeight(entry, child.id, fid)); });
             document.querySelector('.modal.active')?.remove();
             updateUI();
 
@@ -7481,10 +7469,257 @@
                 .finally(() => { _cloudWritesInFlight--; });
         }
 
+        // ── OUTBOX (entries waiting to reach the cloud) ───────────────────
+        //
+        // Log entries used to be sent once, fire-and-forget. If the phone had no
+        // signal (a hospital basement, the ER at 2am) the send failed, nothing
+        // retried it, and the next sync rebuilt the phone's copy from the cloud
+        // alone, so the entry vanished from both places. That entry is usually
+        // a pain crisis.
+        //
+        // Now each entry gets a permanent id (cloudId) when it's created, and a
+        // small record of it waits here until the cloud confirms it. The outbox
+        // holds only {kind, id}; the entry itself is read from appData at send
+        // time, so photos aren't stored twice and an entry deleted on the phone
+        // simply drops out. Sends reuse the same id, so a retry after a lost
+        // response fails as a duplicate key, which counts as delivered.
+        const OUTBOX_KEY = 'ss_outbox';
+        const OUTBOX_KINDS = {
+            pain:    { list: 'painLog',        push: (e, c, f) => _pushPainLog(e, c, f) },
+            temp:    { list: 'temperatureLog', push: (e, c, f) => _pushTempLog(e, c, f) },
+            symptom: { list: 'symptoms',       push: (e, c, f) => _pushSymptom(e, c, f) },
+            weight:  { list: 'weightHistory',  push: (e, c, f) => _pushWeight(e, c, f) },
+            note:    { list: 'notes',          push: (e, c, f) => _pushNote(e, c, f) },
+            med:     { list: 'medications',    push: (e, c, f) => _pushMed(e, c, f) }
+        };
+
+        function looksLikeUUID(v) {
+            return typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v);
+        }
+
+        function loadOutbox() {
+            try { return JSON.parse(localStorage.getItem(OUTBOX_KEY) || '[]') || []; } catch (e) { return []; }
+        }
+
+        function saveOutbox(q) {
+            try {
+                if (q.length) localStorage.setItem(OUTBOX_KEY, JSON.stringify(q));
+                else localStorage.removeItem(OUTBOX_KEY);
+            } catch (e) { markUnsynced(); }
+        }
+
+        // Only phones with an account queue anything: without one there's no
+        // cloud to send to, and the queue would only grow. Checked from
+        // storage, not the network, so it answers correctly while offline.
+        function hasAccountOnDevice() {
+            try {
+                if (familyAuth && familyAuth.isLoggedIn) return true;
+                return Object.keys(localStorage).some(k => k.startsWith('sb-') && k.endsWith('-auth-token'));
+            } catch (e) { return false; }
+        }
+
+        // Call after pushing the entry into its child's list and before saveData(),
+        // so the cloudId is saved with the entry.
+        function queueCloudInsert(kind, entry) {
+            if (!entry || !OUTBOX_KINDS[kind]) return;
+            if (!entry.cloudId) entry.cloudId = newUUID();
+            if (!hasAccountOnDevice()) return;
+            const q = loadOutbox();
+            if (!q.some(op => op.id === entry.cloudId)) q.push({ kind, id: entry.cloudId, queuedAt: Date.now() });
+            saveOutbox(q);
+            // After the caller's saveData(), not before it.
+            setTimeout(() => flushOutbox(), 0);
+        }
+
+        function _findQueued(op) {
+            const kind = OUTBOX_KINDS[op.kind];
+            if (!kind) return null;
+            for (const child of (appData.children || [])) {
+                const entry = (child[kind.list] || []).find(e => e && e.cloudId === op.id);
+                if (entry) return { child, entry, kind };
+            }
+            return null;
+        }
+
+        function _dropFromOutbox(id) {
+            saveOutbox(loadOutbox().filter(op => op.id !== id));
+        }
+
+        let _outboxFlush = null;
+        function flushOutbox() {
+            if (!_outboxFlush) _outboxFlush = _flushOutboxNow().finally(() => { _outboxFlush = null; });
+            return _outboxFlush;
+        }
+
+        async function _flushOutboxNow() {
+            if (!loadOutbox().length || cloudIsOffline()) return;
+            let session = null;
+            try { ({ data: { session } } = await sb.auth.getSession()); } catch (e) { return; }
+            if (!session) return;
+            let familyId = null;
+            try { familyId = await getCurrentFamilyId(); } catch (e) { return; }
+            if (!familyId) return;
+
+            for (const op of loadOutbox()) {
+                const found = _findQueued(op);
+                if (!found) { _dropFromOutbox(op.id); continue; }       // deleted on this phone
+                if (!looksLikeUUID(found.child.id)) continue;            // child not in the cloud yet
+
+                let result;
+                try { result = await found.kind.push(found.entry, found.child.id, familyId); }
+                catch (e) { result = { error: e }; }
+                const err = result && result.error;
+
+                if (!err || err.code === '23505') {                      // saved (or already was)
+                    found.entry.synced = true;
+                    saveData();
+                    _dropFromOutbox(op.id);
+                    continue;
+                }
+                if (err.code === '42501' || /row-level security/i.test(err.message || '')) {
+                    // Will never be accepted with this person's access. Keep the
+                    // entry on the phone, stop retrying, and say so.
+                    _dropFromOutbox(op.id);
+                    markUnsynced();
+                    reportCloudWriteError(err);
+                    continue;
+                }
+                if (err.code && /^(22|23)/.test(err.code)) {
+                    // The data itself was rejected (bad value, constraint), so a
+                    // retry can't help. Kept on the phone; flagged for sign-out.
+                    console.warn('[SickleStrong outbox] rejected', op.kind, err);
+                    _dropFromOutbox(op.id);
+                    markUnsynced();
+                    continue;
+                }
+                // Network or server trouble: leave the rest for the next try.
+                console.warn('[SickleStrong outbox] will retry', op.kind, err);
+                break;
+            }
+        }
+
+        window.addEventListener('online', () => { flushOutbox(); });
+
+        // ── SYNC MERGE ────────────────────────────────────────────────────
+        //
+        // syncAllFromCloud rebuilds each child from the cloud. Without this, that
+        // threw away anything only this phone had: entries still in the outbox,
+        // entries logged before an account existed, photos (pain and profile
+        // photos never upload), and today's water and doses checked off.
+        const MERGE_LISTS = {
+            painLog:        { at: e => e.startTime, limit: 200 },
+            temperatureLog: { at: e => e.timestamp, limit: 200 },
+            symptoms:       { at: e => e.timestamp, limit: 200 },
+            weightHistory:  { at: e => e.timestamp, limit: 100 },
+            notes:          { at: e => e.date,      limit: 100 },
+            medications:    { same: (a, b) => (a.name || '').trim().toLowerCase() === (b.name || '').trim().toLowerCase() }
+        };
+        const KIND_FOR_LIST = { painLog: 'pain', temperatureLog: 'temp', symptoms: 'symptom',
+                                weightHistory: 'weight', notes: 'note', medications: 'med' };
+        // Fields that exist only on the phone, so the phone's value always wins.
+        const DEVICE_ONLY_FIELDS = ['photo', 'resolved', 'endTime', 'duration', 'takenToday', 'missedToday', 'cloudId', 'synced'];
+
+        function _sameMoment(a, b) {
+            const x = Date.parse(a), y = Date.parse(b);
+            return !isNaN(x) && !isNaN(y) && Math.abs(x - y) < 1500;
+        }
+
+        function _fillFromLocal(cloudEntry, localEntry) {
+            for (const [k, v] of Object.entries(localEntry)) {
+                if (v === undefined || v === null) continue;
+                const cv = cloudEntry[k];
+                const cloudEmpty = cv === undefined || cv === null || cv === '' || (Array.isArray(cv) && cv.length === 0);
+                if (cloudEmpty || DEVICE_ONLY_FIELDS.includes(k)) cloudEntry[k] = v;
+            }
+        }
+
+        function mergeLocalIntoCloud(before, after) {
+            const pending = new Set(loadOutbox().map(op => op.id));
+            const toQueue = [];
+
+            for (const child of after) {
+                const old = (before || []).find(o => o.id === child.id);
+                if (!old) continue;
+
+                for (const [list, rule] of Object.entries(MERGE_LISTS)) {
+                    const cloudList = child[list] || [];
+                    const byId = new Map(cloudList.map(e => [String(e.id), e]));
+                    const full = rule.limit && cloudList.length >= rule.limit;
+                    const oldest = full ? Math.min(...cloudList.map(e => Date.parse(rule.at(e))).filter(n => !isNaN(n))) : -Infinity;
+
+                    for (const e of (old[list] || [])) {
+                        if (!e) continue;
+                        let match = byId.get(String(e.cloudId)) || byId.get(String(e.id));
+                        // Entries from before cloudIds existed: recognize them by
+                        // their moment (or a medication by its name).
+                        if (!match && !e.cloudId && !looksLikeUUID(e.id)) {
+                            match = rule.same ? cloudList.find(c => rule.same(c, e))
+                                              : cloudList.find(c => _sameMoment(rule.at(c), rule.at(e)));
+                        }
+                        if (match) { _fillFromLocal(match, e); continue; }
+
+                        if (e.cloudId && pending.has(e.cloudId)) { cloudList.push(e); continue; }   // on its way
+
+                        // Uploaded entries are marked synced; entries that came
+                        // from the cloud carry its uuid as their id.
+                        const beenInCloud = e.synced || (!e.cloudId && looksLikeUUID(String(e.id)));
+                        if (!beenInCloud) {
+                            // Logged on this phone, never seen by the cloud. Keep it,
+                            // and send it, unless it's older than what the cloud
+                            // returned (then it may be there already; keep it only).
+                            cloudList.push(e);
+                            const t = rule.at ? Date.parse(rule.at(e)) : NaN;
+                            if (!full || (!isNaN(t) && t > oldest)) toQueue.push([KIND_FOR_LIST[list], e]);
+                            continue;
+                        }
+                        // Was in the cloud and isn't now: removed by someone with
+                        // access, or older than what's fetched. Same as before.
+                    }
+                    child[list] = cloudList;
+                }
+
+                // Today's tallies and the profile photo live only on this phone.
+                child.waterIntake = old.waterIntake || 0;
+                child.todayMeds = old.todayMeds || 0;
+                if (!child.photo && old.photo) child.photo = old.photo;
+            }
+
+            // A child created on this phone that never reached the cloud.
+            for (const o of (before || [])) {
+                if (!looksLikeUUID(String(o.id)) && !after.some(c => c.id === o.id)) after.push(o);
+            }
+
+            for (const [kind, e] of toQueue) queueCloudInsert(kind, e);
+        }
+
+        // Postgres `timestamp without time zone` comes back with no offset, which
+        // the browser reads as local time, so entries showed hours off after a
+        // sync. They're written as UTC, so read them as UTC.
+        function cloudTime(v) {
+            if (!v || typeof v !== 'string') return v;
+            return /[zZ]|[+-]\d\d:?\d\d$/.test(v) ? v : v.replace(' ', 'T') + 'Z';
+        }
+
+        // what_helped is a text column; the app sends a list, which Postgres
+        // stores as its JSON text. Read either shape back as a list.
+        function parseCloudList(v) {
+            if (Array.isArray(v)) return v;
+            if (typeof v === 'string' && v.trim()) {
+                try { const p = JSON.parse(v); if (Array.isArray(p)) return p; } catch (e) {}
+                return [v];
+            }
+            return [];
+        }
+
         // ── SUPABASE LOAD (on login / session restore) ────────────────────
 
         async function syncAllFromCloud() {
             if (sb.isOffline) return;
+
+            // Send anything waiting first, so the cloud copy we're about to
+            // read already includes it.
+            try { await flushOutbox(); } catch (e) {}
+            const before = appData.children || [];
 
             const { data: { user } } = await sb.auth.getUser();
             if (!user) return;
@@ -7591,22 +7826,22 @@
                             location: (p.locations || []).join(', '),
                             emoji: p.emoji,
                             temperature: p.temperature,
-                            helped: p.what_helped || [],
+                            helped: parseCloudList(p.what_helped),
                             notes: p.notes,
                             requiredER: p.required_er_visit || false,
-                            startTime: p.logged_at,
+                            startTime: cloudTime(p.logged_at),
                             resolved: false
                         })),
                         temperatureLog: childTemp.map(t => ({
                             id: t.id,
-                            temperature: t.temperature_f,
-                            timestamp: t.logged_at
+                            temperature: Number(t.temperature_f),
+                            timestamp: cloudTime(t.logged_at)
                         })),
                         symptoms: childSymp.map(s => ({
                             id: s.id,
                             date: s.logged_at ? s.logged_at.split('T')[0] : '',
                             time: s.logged_at ? s.logged_at.split('T')[1]?.slice(0,5) : '',
-                            timestamp: s.logged_at,
+                            timestamp: cloudTime(s.logged_at),
                             symptoms: s.symptom_type ? [s.symptom_type] : [],
                             severity: s.severity,
                             notes: s.notes,
@@ -7614,22 +7849,25 @@
                             helped: []
                         })),
                         weightHistory: childWt.map(w => ({
-                            weight: w.weight_lbs,
+                            id: w.id,
+                            weight: Number(w.weight_lbs),
                             weightDisplay: `${w.weight_lbs} lbs`,
                             date: w.logged_at ? w.logged_at.split('T')[0] : '',
-                            timestamp: w.logged_at,
+                            timestamp: cloudTime(w.logged_at),
                             context: w.context,
                             notes: w.notes
                         })),
                         notes: childNotes.map(n => ({
                             id: n.id,
-                            date: n.created_at,
+                            date: cloudTime(n.created_at),
                             mood: (n.mood_tags || [])[0] || '😊',
                             text: n.content,
                             title: n.title
                         }))
                     };
                 });
+
+                mergeLocalIntoCloud(before, appData.children);
 
                 if (!appData.currentChildId || !appData.children.find(c => c.id === appData.currentChildId)) {
                     appData.currentChildId = appData.children[0].id;
@@ -7638,6 +7876,7 @@
             }
 
             if (contacts && contacts.length > 0) {
+                const localContacts = appData.contacts || [];
                 appData.contacts = contacts.map(c => ({
                     id: c.id,
                     type: c.type,
@@ -7648,6 +7887,17 @@
                     notes: c.notes,
                     isPrimary: c.is_primary
                 }));
+                // A contact added on this phone that never reached the cloud
+                // (no uuid yet, and no cloud contact with that name and number)
+                // stays rather than vanishing.
+                const norm = v => String(v || '').replace(/\D/g, '');
+                for (const lc of localContacts) {
+                    if (looksLikeUUID(String(lc.id))) continue;
+                    const there = appData.contacts.some(cc =>
+                        (cc.name || '').trim().toLowerCase() === (lc.name || '').trim().toLowerCase()
+                        && norm(cc.phone) === norm(lc.phone));
+                    if (!there) appData.contacts.push(lc);
+                }
             }
 
             saveData();
@@ -7844,10 +8094,13 @@
             return data;
         }
 
-        async function _pushMeds(medications, childId, familyId) {
-            if (!medications || medications.length === 0) return;
+        // One medication per call, carrying the id minted on this phone, so a
+        // retry after a lost response can't create a second copy (the repeat
+        // fails as a duplicate key, which the outbox treats as success).
+        async function _pushMed(m, childId, familyId) {
             return sb.from('medications').insert(
-                medications.map(m => ({
+                {
+                    id: m.cloudId,
                     child_id: childId,
                     family_id: familyId,
                     name: m.name,
@@ -7860,7 +8113,7 @@
                     refill_date: m.refillDate || null,
                     start_date: m.startDate || null,
                     is_active: true
-                }))
+                }
             );
         }
 
@@ -7868,6 +8121,7 @@
             // pain_logs.severity is CHECK 1-5 in DB
             const severity = Math.min(5, Math.max(1, Math.round(entry.level)));
             return sb.from('pain_logs').insert({
+                id: entry.cloudId,
                 child_id: childId,
                 family_id: familyId,
                 severity,
@@ -7881,6 +8135,7 @@
 
         async function _pushTempLog(entry, childId, familyId) {
             return sb.from('temperature_logs').insert({
+                id: entry.cloudId,
                 child_id: childId,
                 family_id: familyId,
                 temperature_f: entry.temperature,
@@ -7891,6 +8146,7 @@
 
         async function _pushNote(note, childId, familyId) {
             return sb.from('notes').insert({
+                id: note.cloudId,
                 child_id: childId,
                 family_id: familyId,
                 title: note.title || null,
@@ -7903,6 +8159,7 @@
         async function _pushSymptom(entry, childId, familyId) {
             const symptomType = Array.isArray(entry.symptoms) ? entry.symptoms[0] : entry.symptoms;
             return sb.from('symptoms').insert({
+                id: entry.cloudId,
                 child_id: childId,
                 family_id: familyId,
                 symptom_type: symptomType || null,
@@ -7915,6 +8172,7 @@
 
         async function _pushWeight(entry, childId, familyId) {
             return sb.from('weight_logs').insert({
+                id: entry.cloudId,
                 child_id: childId,
                 family_id: familyId,
                 weight_lbs: entry.weight,
@@ -9670,8 +9928,13 @@
             const showWarn = (msg) => { warn.textContent = msg; warn.style.display = 'block'; };
             exportBtn.addEventListener('click', () => exportAllData());
 
-            let unsynced = false;
-            try { unsynced = localStorage.getItem('ss_unsynced') === '1'; } catch (e) {}
+            // Give anything waiting one chance to go before deciding to warn.
+            if (!cloudIsOffline()) { try { await flushOutbox(); } catch (e) {} }
+            const hasUnsent = () => {
+                try { return localStorage.getItem('ss_unsynced') === '1' || loadOutbox().length > 0; }
+                catch (e) { return false; }
+            };
+            let unsynced = hasUnsent();
             if (unsynced) {
                 showWarn('Some entries on this phone may not have reached your account (for example, ones logged while offline). ' +
                     'Signing out would erase them. Export a copy first if you want to keep them.');
@@ -9688,11 +9951,11 @@
                 confirmBtn.textContent = 'Signing out…';
 
                 // Let any save that's still on its way finish (up to ~8s).
-                for (let i = 0; i < 40 && _cloudWritesInFlight > 0; i++) {
+                try { await flushOutbox(); } catch (e) {}
+                for (let i = 0; i < 40 && (_cloudWritesInFlight > 0 || _outboxFlush); i++) {
                     await new Promise(r => setTimeout(r, 200));
                 }
-                let nowUnsynced = false;
-                try { nowUnsynced = localStorage.getItem('ss_unsynced') === '1'; } catch (e) {}
+                const nowUnsynced = hasUnsent();
                 if ((_cloudWritesInFlight > 0 || nowUnsynced) && !unsynced) {
                     // Something just failed or is stuck: stop and let them choose.
                     unsynced = true;
@@ -9709,7 +9972,7 @@
                 try {
                     Object.keys(localStorage)
                         .filter(k => k === 'sickleStrongData' || k === 'ss_auth' || k === 'ss_auth_dismissed'
-                                  || k === 'ss_unsynced' || k.startsWith('sb-'))
+                                  || k === 'ss_unsynced' || k === OUTBOX_KEY || k.startsWith('sb-'))
                         .forEach(k => localStorage.removeItem(k));
                 } catch (e) {}
                 location.reload();
