@@ -13,6 +13,10 @@
 --   psql "$SUPABASE_DB_URL" -At -f db/dump-security-model.sql > db/security-model.sql
 --
 -- (or paste it into the Supabase SQL editor and save the single text column)
+--
+-- Functions installed from the SQL editor keep Windows line endings in their
+-- bodies. Convert CRLF to LF before committing so the diff shows only real
+-- changes.
 
 with header as (
   select format(
