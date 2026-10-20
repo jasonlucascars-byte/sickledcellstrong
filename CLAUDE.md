@@ -45,6 +45,7 @@ node tests/logged-by.test.mjs                # 12 checks — "Logged by" names; 
 node tests/teen-approval.test.mjs            # 22 checks — teen self sign-up, parent approval
 node tests/quiet-messages.test.mjs           # 20 checks — no alert()/confirm(); 14px+ text at 360px
 node tests/cloud-edits.test.mjs              # 8 checks — synced records' buttons work; edits/deletes reach the cloud
+node tests/push-reminders.test.mjs           # 40 checks — Web Push encryption, reminder schedule, enable/disable
 ```
 
 Tests are plain `.mjs` scripts run directly by Node — there is no test runner,
@@ -128,6 +129,32 @@ Two storage invariants, both fixing real data loss — don't undo either:
 
 `tests/storage-resilience.test.mjs` pins both.
 
+### Medication reminders (Web Push)
+
+Reminders 15 minutes before each dose come from the server, so they arrive
+with the app closed. The phone subscribes (`savePushSubscription()`, VAPID
+public key `VAPID_PUBLIC_KEY` in `index.html`) and hands the subscription to
+`save_push_subscription`. Every 5 minutes pg_cron calls the
+`med-reminders` edge function (`supabase/functions/med-reminders/`, deployed
+out of band, `verify_jwt` off — it checks an `x-cron-secret` header instead).
+It reads with the service role, so `schedule.ts` must only remind people who
+hold `child_access` to that child; `push_sent` keeps each dose to one push.
+The VAPID private key and cron secret live in `private.push_config` (read via
+`get_push_config`, service role only) — never commit them; this repo is
+public.
+
+- Needs an account (the server only sees cloud medications) and, on iPhone,
+  the app added to the Home Screen; the reminders card explains each case.
+- Lock screens are public: by default a reminder names the child and the
+  time, not the medicine (`show_names`, toggled on the card).
+- Sign-out and Clear All Data call `removePushSubscription()` *before*
+  signing out, so the next account on the phone never gets the last one's
+  children on its lock screen. Deleting the account cascades server-side.
+- Medication edits and deletes must reach the cloud (`_pushMedChange`;
+  delete = `is_active = false`), or a deleted medicine keeps being reminded.
+- `webpush.ts` is Web Crypto only (runs in Deno and Node);
+  `tests/push-reminders.test.mjs` decrypts its output independently.
+
 ### Access model — read this before touching sharing
 
 Backing store is Supabase (client created at the top of the main script; the
@@ -172,7 +199,8 @@ change both together.
 **Database work is out of band.** The RPCs the frontend calls
 (`provision_current_user`, `redeem_child_invite`, `generate_child_invite`,
 `lookup_family_by_code`, `switch_household`, `set_child_active_status`,
-`delete_child_permanently`, `cancel_child_invite`, `delete_my_account`) and all RLS policies live in
+`delete_child_permanently`, `cancel_child_invite`, `delete_my_account`,
+`save_push_subscription`, `remove_push_subscription`) and all RLS policies live in
 Supabase. There are **no migrations in git**. Do not attempt schema changes;
 assume the live database already provides them.
 

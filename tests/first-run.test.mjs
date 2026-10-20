@@ -88,8 +88,10 @@ for (const width of [390, 360]) {
   check(`[${width}px] "Add myself" finish screen talks about your care, not your child's`,
     /your care/i.test(done.body) && !/your child's care/i.test(done.body));
   const notif = steps.find(s => /Notifications/.test(s.title));
-  check(`[${width}px] Notification step doesn't promise reminders that don't exist`,
-    !!notif && !/15-minute|15 minutes before|on-time medication alerts|never miss/i.test(notif.title + notif.subtitle + notif.body));
+  // Dose reminders are real now (server push), but only with an account —
+  // the step has to say so rather than imply they just start.
+  check(`[${width}px] Notification step is honest: reminders need an account`,
+    !!notif && /account/i.test(notif.body) && !/never miss/i.test(notif.title + notif.subtitle + notif.body));
 
   // Avatar picker fits the card.
   const overflow = await page.evaluate(() => {

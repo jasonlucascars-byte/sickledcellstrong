@@ -1650,7 +1650,7 @@
                             <button class="btn btn-primary btn-small" onclick="toggleNotifications()" id="notifButton">Enable</button>
                         </div>
                         <p style="font-size:14px;color:var(--text-light);line-height:1.6;" id="notifHelpText">
-                            Get reminders 15 minutes before each medication is due, plus end-of-day safety check.
+                            Get a reminder 15 minutes before each dose — even when the app is closed and the phone is locked.
                         </p>
                     </div>
                 </div>
@@ -2601,14 +2601,14 @@
                 render: () => `
                     <div style="text-align: center; padding: 20px 0;">
                         <div style="font-size: 64px; margin-bottom: 20px;">🔔</div>
-                        <!-- Copy matches what scheduleMedicationReminders() really does
-                             (one 8 PM check, while the app is open). The old text promised
-                             15-minute and on-time reminders that were never built. -->
+                        <!-- Reminders come from the server (Web Push), so they need an
+                             account; most families make one right after this wizard, and
+                             refreshPushSubscription() subscribes on that first signed-in sync. -->
                         <p style="color: var(--text); margin-bottom: 20px; line-height: 1.8;">
-                            At 8 PM, SickleStrong checks today's doses and nudges you if any look missed.
+                            Get a reminder 15 minutes before each dose — even when the app is closed.
                         </p>
                         <div style="background: var(--bg); padding: 16px 20px; border-radius: 16px; margin-bottom: 30px; font-size: 16px; color: var(--text-light); line-height: 1.6; text-align: left;">
-                            🛡️ Works while SickleStrong is open on this phone. Reminders before each dose are coming soon.
+                            🛡️ Reminders start once you've made your free account.${isIOSDevice() && !isStandaloneApp() ? ' On iPhone, add SickleStrong to your Home Screen first.' : ''}
                         </div>
                         <button class="btn btn-primary btn-full" style="margin-bottom: 10px;" onclick="enableNotificationsInWizard()">Enable Notifications</button>
                         <button class="btn btn-secondary btn-full" onclick="nextWizardStep()">Skip for Now</button>
@@ -2731,7 +2731,13 @@
         async function enableNotificationsInWizard() {
             const granted = await requestNotificationPermission();
             if (granted) {
-                notify('✅ Notifications enabled! You\'ll receive medication reminders.');
+                // Remember the wish; the subscription is saved on the first
+                // signed-in sync (or right now, if already signed in).
+                appData.pushEnabled = true;
+                appData.notificationsEnabled = true;
+                saveData();
+                refreshPushSubscription();
+                showToast('✅ Reminders will start once your account is set up.');
             }
             nextWizardStep();
         }
@@ -4246,50 +4252,185 @@
             }
         }
 
-        // Notification Functions
-        async function requestNotificationPermission() {
-            if (!('Notification' in window)) {
-                notify('This browser does not support notifications. Please use a modern browser.');
-                return false;
-            }
+        // ── MEDICATION REMINDERS ─────────────────────────────────────────
+        //
+        // Reminders 15 minutes before each dose come from the server (Web
+        // Push), so they arrive with the app closed and the phone locked. The
+        // phone's part: ask permission, subscribe with our public VAPID key,
+        // and hand the subscription to save_push_subscription. Every 5 minutes
+        // the med-reminders edge function sends what's due to every phone of
+        // everyone with access to that child (supabase/functions/med-reminders).
+        //
+        // That needs an account (the server only knows cloud medications) and,
+        // on iPhone, the app added to the Home Screen — Safari only allows web
+        // push for Home Screen apps (iOS 16.4+). Each case gets its own honest
+        // message instead of a button that silently does nothing.
+        //
+        // appData.pushEnabled is what the family asked for; the subscription is
+        // re-saved on every signed-in open, because browsers rotate endpoints
+        // and a reminder sent to a dead one is just lost.
+        const VAPID_PUBLIC_KEY = 'BCAggw8Vnu6-GT0kHRGnIOyy9kUfd2yKyGD1DTf85fhY0pxVqq2B71u-a4Xw2WAvhdw3SGkWMbizuiBvy1nsOLo';
 
-            if (Notification.permission === 'granted') {
-                appData.notificationsEnabled = true;
-                return true;
-            }
-
-            if (Notification.permission !== 'denied') {
-                const permission = await Notification.requestPermission();
-                
-                if (permission === 'granted') {
-                    appData.notificationsEnabled = true;
-                    new Notification('SickleStrong Notifications Enabled! 💙', {
-                        body: 'You\'ll receive medication reminders and safety checks.',
-                        icon: '❤️'
-                    });
-                    saveData();
-                    return true;
-                }
-            }
-            return false;
+        function isIOSDevice() {
+            return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+                (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        }
+        function isStandaloneApp() {
+            return navigator.standalone === true ||
+                (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+        }
+        function pushSupported() {
+            return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+        }
+        function _vapidKeyBytes() {
+            const s = VAPID_PUBLIC_KEY.replace(/-/g, '+').replace(/_/g, '/');
+            const bin = atob(s + '='.repeat((4 - s.length % 4) % 4));
+            return Uint8Array.from(bin, c => c.charCodeAt(0));
+        }
+        // serviceWorker.ready never settles when no worker can register (a
+        // private tab, file://), so give up after a few seconds.
+        function _swReady(ms = 4000) {
+            return Promise.race([
+                navigator.serviceWorker.ready,
+                new Promise((_, rej) => setTimeout(() => rej(new Error('SW_TIMEOUT')), ms))
+            ]);
+        }
+        async function _signedIn() {
+            try { const { data } = await sb.auth.getSession(); return !!data?.session; } catch (e) { return false; }
         }
 
-        function sendNotification(title, body, options = {}) {
-            if (!appData.notificationsEnabled || Notification.permission !== 'granted') {
-                return;
+        // Which explanation the reminders card shows.
+        async function reminderState() {
+            if (isIOSDevice() && !isStandaloneApp()) return 'ios-install';
+            if (!pushSupported()) return 'unsupported';
+            if (Notification.permission === 'denied') return 'blocked';
+            if (!(await _signedIn())) return 'signed-out';
+            if (appData.pushEnabled && Notification.permission === 'granted') return 'enabled';
+            return 'off';
+        }
+
+        async function requestNotificationPermission() {
+            if (!('Notification' in window)) return false;
+            if (Notification.permission === 'granted') return true;
+            if (Notification.permission === 'denied') return false;
+            return (await Notification.requestPermission()) === 'granted';
+        }
+
+        // Subscribe this phone and tell the server. Returns '' or a reason.
+        async function savePushSubscription() {
+            const reg = await _swReady();
+            let sub = await reg.pushManager.getSubscription();
+            const fresh = () => reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: _vapidKeyBytes() });
+            if (!sub) {
+                sub = await fresh();
+            }
+            let j = sub.toJSON();
+            const { error } = await sb.rpc('save_push_subscription', {
+                p_endpoint: j.endpoint,
+                p_p256dh: j.keys.p256dh,
+                p_auth: j.keys.auth,
+                p_time_zone: (Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Chicago'),
+                p_show_names: !!appData.pushShowNames
+            });
+            if (error) {
+                console.warn('[SickleStrong] save_push_subscription failed', error);
+                return cloudIsOffline()
+                    ? "You appear to be offline. Connect and try again."
+                    : "We couldn't turn on reminders just now. Please try again in a moment.";
+            }
+            return '';
+        }
+
+        // Best effort, never blocks sign-out for long: the server also drops
+        // a subscription the push service reports as gone.
+        async function removePushSubscription() {
+            try {
+                // getRegistration(), not .ready: it answers at once when there
+                // is no worker, so sign-out never waits on a timeout.
+                const reg = 'serviceWorker' in navigator ? await navigator.serviceWorker.getRegistration() : null;
+                if (!reg || !reg.pushManager) return;
+                const sub = await reg.pushManager.getSubscription();
+                if (!sub) return;
+                const endpoint = sub.endpoint;
+                await Promise.race([
+                    sb.rpc('remove_push_subscription', { p_endpoint: endpoint }),
+                    new Promise(r => setTimeout(r, 3000))
+                ]);
+                await sub.unsubscribe();
+            } catch (e) { /* nothing to remove */ }
+        }
+
+        // On every signed-in open. Quiet: a failure here is retried next open.
+        async function refreshPushSubscription() {
+            try {
+                if (!appData.pushEnabled || !pushSupported() || Notification.permission !== 'granted') return;
+                if (!(await _signedIn())) return;
+                await savePushSubscription();
+            } catch (e) { console.warn('[SickleStrong] push refresh skipped', e); }
+            updateNotificationUI();
+        }
+
+        async function toggleNotifications() {
+            const state = await reminderState();
+            if (state === 'enabled') {
+                appData.pushEnabled = false;
+                appData.notificationsEnabled = false;
+                saveData();
+                await removePushSubscription();
+                showToast('Medication reminders are off on this phone.');
+                return updateNotificationUI();
+            }
+            if (state === 'ios-install') return showIOSInstallHelp();
+            if (state === 'blocked') return showNotificationHelp();
+            if (state === 'signed-out') return openSignIn();
+            if (state === 'unsupported') {
+                return notify("This browser can't show reminders.\n\nOpen SickleStrong in Chrome or Safari, or install it to your Home Screen, and try again.");
             }
 
-            const notification = new Notification(title, {
-                body: body,
-                icon: '❤️',
-                badge: '💊',
-                ...options
-            });
+            const granted = await requestNotificationPermission();
+            if (!granted) return updateNotificationUI();
+            let problem = '';
+            try { problem = await savePushSubscription(); }
+            catch (e) {
+                console.warn('[SickleStrong] push subscribe failed', e);
+                problem = "This phone wouldn't set up reminders. Close SickleStrong, open it again, and tap Enable.";
+            }
+            if (problem) { notify(problem); return updateNotificationUI(); }
+            appData.pushEnabled = true;
+            appData.notificationsEnabled = true; // keeps the in-app 8 PM check
+            saveData();
+            scheduleMedicationReminders();
+            showToast('✅ Reminders are on. You\'ll get one 15 minutes before each dose.');
+            updateNotificationUI();
+        }
 
-            notification.onclick = function() {
-                window.focus();
-                this.close();
-            };
+        async function setPushShowNames(on) {
+            appData.pushShowNames = !!on;
+            saveData();
+            if (appData.pushEnabled) {
+                const problem = await savePushSubscription().catch(() => 'x');
+                if (problem) showToast("Couldn't save that just now — we'll try again next time you open the app.", 'warning');
+            }
+        }
+
+        function showIOSInstallHelp() {
+            notify("On iPhone, reminders need SickleStrong on your Home Screen.\n\n" +
+                "1. In Safari, tap the Share button (the square with an arrow).\n" +
+                "2. Tap \"Add to Home Screen\", then Add.\n" +
+                "3. Open SickleStrong from your Home Screen and tap Enable here.\n\n" +
+                "Your records come with you — just sign in once there.");
+        }
+
+        // Shows a notification from the page itself. new Notification() throws
+        // on Android ("Illegal constructor"), so go through the service worker.
+        async function sendNotification(title, body, options = {}) {
+            if (!('Notification' in window) || Notification.permission !== 'granted') return;
+            try {
+                const reg = await _swReady(2000);
+                await reg.showNotification(title, { body, icon: '/icon-192.png', badge: '/icon-192.png', ...options });
+            } catch (e) {
+                try { new Notification(title, { body, ...options }); } catch (e2) { /* nowhere to show it */ }
+            }
         }
 
         function scheduleMedicationReminders() {
@@ -4323,85 +4464,47 @@
             }
         }
 
-        async function toggleNotifications() {
-            if (appData.notificationsEnabled) {
-                appData.notificationsEnabled = false;
-                saveData();
-                updateNotificationUI();
-                return;
-            }
-
-            // Check if notifications are supported
-            if (!('Notification' in window)) {
-                updateNotificationUI('unsupported');
-                return;
-            }
-
-            // Already blocked — show helpful guidance
-            if (Notification.permission === 'denied') {
-                updateNotificationUI('blocked');
-                return;
-            }
-
-            const enabled = await requestNotificationPermission();
-            if (enabled) {
-                scheduleMedicationReminders();
-                updateNotificationUI('enabled');
-            } else if (Notification.permission === 'denied') {
-                updateNotificationUI('blocked');
-            }
-        }
-
-        function updateNotificationUI(state) {
+        async function updateNotificationUI() {
             const statusText = document.getElementById('notifStatusText');
             const button = document.getElementById('notifButton');
             const helpText = document.getElementById('notifHelpText');
-
-            // Auto-detect state if not passed
-            if (!state) {
-                if (appData.notificationsEnabled && Notification.permission === 'granted') {
-                    state = 'enabled';
-                } else if (Notification.permission === 'denied') {
-                    state = 'blocked';
-                } else {
-                    state = 'off';
-                }
-            }
-
+            if (!statusText || !button) return;
+            const state = await reminderState();
+            const set = (status, color, label, primary, help) => {
+                statusText.textContent = status;
+                statusText.style.color = color;
+                button.textContent = label;
+                button.className = `btn ${primary ? 'btn-primary' : 'btn-secondary'} btn-small`;
+                button.style.display = label ? '' : 'none';
+                if (helpText) helpText.innerHTML = help;
+            };
+            // Static copy only below — nothing user-supplied reaches innerHTML.
             if (state === 'enabled') {
-                statusText.textContent = 'Notifications: Enabled ✓';
-                statusText.style.color = 'var(--success)';
-                button.textContent = 'Disable';
-                button.className = 'btn btn-secondary btn-small';
-                if (helpText) helpText.innerHTML = 'You\'ll get reminders 15 minutes before each medication is due.';
-
+                set('Reminders: On ✓', 'var(--success)', 'Turn off', false,
+                    `You'll get a reminder 15 minutes before each dose, even when the app is closed. ` +
+                    `Everyone on the care team who turns reminders on gets them too.` +
+                    `<label style="display:flex;align-items:center;gap:10px;margin-top:12px;font-size:16px;color:var(--text);cursor:pointer;">` +
+                    `<input type="checkbox" id="pushShowNames" style="width:22px;height:22px;" ${appData.pushShowNames ? 'checked' : ''}>` +
+                    `Show medicine names on the lock screen</label>` +
+                    `<div style="font-size:14px;margin-top:4px;">Off keeps them private — anyone glancing at the phone sees only "1 medicine due at 8:00 AM".</div>`);
+                document.getElementById('pushShowNames')?.addEventListener('change', e => setPushShowNames(e.target.checked));
             } else if (state === 'blocked') {
-                statusText.textContent = 'Notifications: Blocked ⚠️';
-                statusText.style.color = 'var(--warning)';
-                button.textContent = 'How to Fix';
-                button.className = 'btn btn-secondary btn-small';
-                button.onclick = showNotificationHelp;
-                if (helpText) helpText.innerHTML = `
-                    <strong>Notifications are blocked.</strong> To enable:<br>
-                    1. Tap the 🔒 lock icon in your browser address bar<br>
-                    2. Find "Notifications" → Set to <strong>Allow</strong><br>
-                    3. Refresh the page and try again
-                `;
-
+                set('Reminders: Blocked', 'var(--warning)', 'How to fix', false,
+                    'Notifications are turned off for SickleStrong in this phone\'s settings. Tap "How to fix" to turn them back on.');
+            } else if (state === 'ios-install') {
+                set('Reminders: Add to Home Screen first', 'var(--text)', 'Show me how', true,
+                    'iPhone only sends reminders to apps on your Home Screen. It takes about 30 seconds.');
+            } else if (state === 'signed-out') {
+                set('Reminders: Sign in to turn on', 'var(--text)', 'Sign in', true,
+                    'Reminders come from your SickleStrong account, so they reach you even when the app is closed.');
             } else if (state === 'unsupported') {
-                statusText.textContent = 'Notifications: Not supported';
-                statusText.style.color = 'var(--text-light)';
-                button.style.display = 'none';
-                if (helpText) helpText.innerHTML = 'Your browser doesn\'t support notifications. Try opening in Chrome.';
-
+                set('Reminders: Not available here', 'var(--text-light)', '', false,
+                    'This browser can\'t show reminders. Open SickleStrong in Chrome or Safari.');
             } else {
-                statusText.textContent = 'Notifications: Off';
-                statusText.style.color = 'var(--text)';
-                button.textContent = 'Enable';
-                button.className = 'btn btn-primary btn-small';
-                button.onclick = toggleNotifications;
-                if (helpText) helpText.innerHTML = 'Get reminders 15 minutes before each medication is due, plus end-of-day safety check.';
+                set('Reminders: Off', 'var(--text)', 'Enable', true,
+                    'Get a reminder 15 minutes before each dose — even when the app is closed and the phone is locked.');
             }
+            button.onclick = toggleNotifications;
         }
 
         function showNotificationHelp() {
@@ -6458,7 +6561,9 @@
                 savedContact = appData.contacts.find(c => String(c.id) === String(editId));
                 if (savedContact) Object.assign(savedContact, contactData);
             } else {
-                savedContact = { id: newUUID(), ...contactData };
+                // Local id stays numeric on purpose: sync keeps non-uuid contacts that
+                // never reached the cloud. _pushContact gives it a stable cloudId.
+                savedContact = { id: Date.now(), ...contactData };
                 appData.contacts.push(savedContact);
             }
 
@@ -7975,6 +8080,7 @@
             }
 
             saveData();
+            refreshPushSubscription(); // not awaited: reminders must never hold up the first render
             // Circles are loaded before the first render, not after: updateUI()
             // runs the permission gating, and with no circle data that fails
             // open — which would flash write controls a view-only caregiver
@@ -9537,6 +9643,7 @@
                 showDeleteAccount();
             });
             screen.querySelector('#teenSignOut').addEventListener('click', async () => {
+                await removePushSubscription();
                 try { await sb.auth.signOut({ scope: 'local' }); } catch (e) {}
                 try {
                     Object.keys(localStorage)
@@ -10195,6 +10302,7 @@
                 return;
             }
             
+            await removePushSubscription();
             localStorage.removeItem('sickleStrongData');
             location.reload();
         }
@@ -10292,6 +10400,9 @@
                 }
 
                 trackEvent('account_deleted');
+                // The server dropped this account's subscriptions with the
+                // account; unsubscribe the phone too so nothing lingers.
+                try { const reg = await navigator.serviceWorker?.getRegistration(); const ps = reg?.pushManager && await reg.pushManager.getSubscription(); if (ps) await ps.unsubscribe(); } catch (e) {}
                 // The auth user is already gone server-side, so signOut may
                 // error; that's fine — local state is cleared either way.
                 try { await sb.auth.signOut({ scope: 'local' }); } catch (e) {}
@@ -10387,6 +10498,9 @@
                 }
 
                 trackEvent('signed_out');
+                // Before signing out: this phone's lock screen must stop showing
+                // this account's children.
+                await removePushSubscription();
                 try { await sb.auth.signOut({ scope: 'local' }); } catch (e) {}
                 try {
                     Object.keys(localStorage)

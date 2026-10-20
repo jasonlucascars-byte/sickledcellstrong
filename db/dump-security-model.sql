@@ -59,7 +59,9 @@ rpcs as (
                       'delete_my_account','stamp_logged_by','stamp_created_by',
                       'create_teen_request','lookup_teen_request','approve_teen_request',
                       'is_teen_account','block_teen_child_insert',
-                      'grant_owner_child_access','prevent_last_parent_removal')
+                      'grant_owner_child_access','prevent_last_parent_removal',
+                      'save_push_subscription','remove_push_subscription',
+                      'note_push_failure','get_push_config')
 ),
 pols as (
   select E'\n\n-- ============================================================\n' ||

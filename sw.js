@@ -3,7 +3,7 @@
 // Enables offline access + installability
 // ============================================================
 // Bump this version with every deploy to force cache refresh:
-const CACHE_VERSION = 'sicklestrong-v18';
+const CACHE_VERSION = 'sicklestrong-v19';
 
 const APP_SHELL = [
   '/',
@@ -99,4 +99,42 @@ self.addEventListener('fetch', (event) => {
         });
       })
   );
+});
+
+// ── PUSH: medication reminders sent by the server ────────────
+// Sent by supabase/functions/med-reminders, encrypted for this browser only.
+// Browsers require every push to show something (userVisibleOnly), so even a
+// payload we can't read shows a generic reminder rather than nothing.
+self.addEventListener('push', (event) => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch (e) { /* show the generic one */ }
+  const title = data.title || '💊 Medication reminder';
+  event.waitUntil(
+    self.registration.showNotification(title, {
+      body: data.body || 'A medicine is due soon. Tap to open SickleStrong.',
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      // Same child + same dose time replaces rather than stacks.
+      tag: data.tag || 'med-reminder',
+      renotify: true,
+      data: { url: data.url || '/', childId: data.childId || null },
+    })
+  );
+});
+
+// Tapping the reminder opens the app — the already-open window if there is
+// one, so a parent mid-entry doesn't lose it to a second copy of the app.
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const target = new URL((event.notification.data && event.notification.data.url) || '/', self.location.origin).href;
+  event.waitUntil((async () => {
+    const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const w of wins) {
+      if (new URL(w.url).origin === self.location.origin) {
+        await w.focus();
+        return;
+      }
+    }
+    await self.clients.openWindow(target);
+  })());
 });
