@@ -3898,6 +3898,20 @@
             }
         }
 
+        // The pain faces are labeled with ranges ("Medium 5-6") but save the
+        // top of the range (6). Showing "6/10" told a parent who picked
+        // "Medium 5-6" that she'd entered a number she never chose; show the
+        // face she picked instead.
+        function painLevelLabel(level) {
+            const n = Number(level);
+            if (!isFinite(n)) return '';
+            if (n <= 2) return 'Mild · 1–2';
+            if (n <= 4) return 'A little · 3–4';
+            if (n <= 6) return 'Medium · 5–6';
+            if (n <= 8) return 'A lot · 7–8';
+            return 'Really bad · 9–10';
+        }
+
         // "Logged by Kim" on entries someone else made; nothing on your own, or
         // when the author can't be named (removed from the circle since).
         function loggedByHtml(entry) {
@@ -4011,7 +4025,7 @@
                                     <span style="font-weight:800;font-size:14px;font-family:'Sora',sans-serif;">🫁 Pain Episode</span>
                                     <span style="font-size:11px;background:${p.level >= 7 ? 'var(--emergency)' : 'var(--warning)'};
                                                  color:white;padding:2px 8px;border-radius:20px;font-weight:700;">
-                                        ${escapeHtml(p.level)}/10
+                                        ${escapeHtml(painLevelLabel(p.level))}
                                     </span>
                                 </div>
                                 <span style="font-size:11px;color:var(--text-light);">${timeStr}</span>

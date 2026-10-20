@@ -66,7 +66,7 @@ const out = await page.evaluate(async () => {
   r.selfHidden = !/Logged by Jason/.test(text);
   r.goneHidden = (text.match(/Logged by/g) || []).length;
   r.xssSafe = !hist.querySelector('img') && !window.__xss && /Logged by <img/.test(text);
-  r.showsTen = /8\/10/.test(text);
+  r.showsTen = /A lot · 7–8/.test(text) && !/8\/10/.test(text);
   renderNotes();
   r.noteShown = /Logged by Kimberly/.test(document.getElementById('notesList')?.innerText || '');
   return r;
@@ -79,7 +79,7 @@ check('Someone else\'s pain and fever entries say "Logged by Kimberly"', out.kim
 check('Your own entries show no label', out.selfHidden);
 check('An author who can\'t be named shows no label', out.goneHidden === 3, String(out.goneHidden));
 check('Author name renders as text, never HTML', out.xssSafe);
-check('Pain shows its real level out of 10', out.showsTen);
+check('Pain shows the face that was picked ("A lot · 7–8"), not a bare number', out.showsTen);
 check('Notes show who wrote them', out.noteShown);
 check('No uncaught page errors', pageErrors.length === 0, [...new Set(pageErrors)].join(' | '));
 
