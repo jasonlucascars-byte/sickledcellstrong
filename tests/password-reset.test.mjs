@@ -51,17 +51,15 @@ const check = (name, ok, detail = '') => {
 const browser = await chromium.launch({ executablePath: CHROMIUM });
 const pageErrors = [];
 
-// Opens the app as if from a reset email. `answers` = what the person types
-// into each prompt; `pw` = how the server answers each updateUser.
+// Opens the app as if from a reset email and types each of `answers` into the
+// in-app "Choose a new password" form (null = tap "Not now"). `pw` = how the
+// server answers each updateUser. `forms` records what the form said before
+// each try (its error line); `notices` are the toasts/cards shown after.
 async function resetFlow({ answers, pw, pendingInvite = null }) {
   const page = await (await browser.newContext()).newPage();
   page.on('pageerror', (e) => pageErrors.push(e.message));
-  const shown = []; let i = 0;
-  page.on('dialog', async (d) => {
-    shown.push({ type: d.type(), msg: d.message() });
-    if (d.type() === 'prompt') { const a = answers[i++]; a == null ? await d.dismiss() : await d.accept(a); }
-    else await d.accept();
-  });
+  const dialogs = [];
+  page.on('dialog', async (d) => { dialogs.push(d.type()); await d.dismiss(); });
   await page.route('**/*', (r) => {
     const u = r.request().url();
     if (u.startsWith('file://')) return r.continue();
@@ -78,12 +76,26 @@ async function resetFlow({ answers, pw, pendingInvite = null }) {
     if (pendingInvite) localStorage.setItem('ss_pending_invite', JSON.stringify(pendingInvite));
   }, { pw, pendingInvite });
   await page.goto(INDEX_URL + '#access_token=x&type=recovery', { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(1200);
-  const calls = await page.evaluate(() => window.__calls);
-  const stored = await page.evaluate(() => localStorage.getItem('ss_pending_invite'));
-  // Notices replaced alert(); count them as alerts, after the prompts.
-  for (const msg of await page.evaluate(() => window.__notices)) shown.push({ type: 'alert', msg });
-  return { page, shown, calls, stored };
+  const forms = [];
+  for (const a of answers) {
+    const open = await page.waitForSelector('#ssPwReset', { timeout: 3000 }).then(() => true, () => false);
+    if (!open) break;
+    forms.push(await page.evaluate(() => {
+      const e = document.getElementById('ssPwError');
+      return { error: e && e.style.display === 'block' ? e.textContent : '', type: document.getElementById('ssPwInput').type };
+    }));
+    if (a == null) { await page.click('#ssPwCancel'); continue; }
+    await page.fill('#ssPwInput', a);
+    await page.click('#ssPwSave');
+    await page.waitForTimeout(150);
+  }
+  await page.waitForTimeout(800);
+  const after = await page.evaluate(() => ({
+    open: !!document.getElementById('ssPwReset'),
+    error: document.getElementById('ssPwError')?.textContent || '',
+    calls: window.__calls, stored: localStorage.getItem('ss_pending_invite'), notices: window.__notices,
+  }));
+  return { page, forms, dialogs, ...after };
 }
 
 const PWNED = { code: 'weak_password', message: 'Password is known to be weak and easy to guess, please choose a different one.', reasons: ['pwned'] };
@@ -92,29 +104,28 @@ const SAME = { code: 'same_password', message: 'New password should be different
 // ── 1. Breached, then same-as-old, then accepted — all on one link ──
 {
   const r = await resetFlow({ answers: ['Password1', 'OldPass1x', 'Sickle1Strong!'], pw: [PWNED, SAME, null] });
-  const prompts = r.shown.filter(d => d.type === 'prompt').map(d => d.msg);
-  const alerts = r.shown.filter(d => d.type === 'alert').map(d => d.msg);
-  check('Rejected password: asked again on the same link (3 tries, 1 email)', prompts.length === 3 && r.calls.filter(c => c[0] === 'updateUser').length === 3);
-  check('Breached password: says so plainly', /data breach/.test(prompts[1] || ''));
-  check('Same password: says so plainly', /already have/.test(prompts[2] || ''));
-  check('Never blames an expired link for a password rule', !alerts.concat(prompts).some(m => /expire/i.test(m)));
-  check('Success message after the third try', /password is updated/i.test(alerts.at(-1) || ''));
+  check('Asks in an app form, not a browser pop-up', r.forms.length === 3 && r.dialogs.length === 0, JSON.stringify(r.dialogs));
+  check('The password is hidden while typing', r.forms.every(f => f.type === 'password'));
+  check('Rejected password: asked again on the same link (3 tries, 1 email)', r.calls.filter(c => c[0] === 'updateUser').length === 3);
+  check('Breached password: says so plainly', /data breach/.test(r.forms[1]?.error || ''));
+  check('Same password: says so plainly', /already have/.test(r.forms[2]?.error || ''));
+  check('Never blames an expired link for a password rule', !r.forms.map(f => f.error).concat(r.notices).some(m => /expire/i.test(m)));
+  check('Success message after the third try, and the form closes', /password is updated/i.test(r.notices.at(-1) || '') && !r.open);
   await r.page.context().close();
 }
 
 // ── 2. Too short is caught before asking the server ──
 {
   const r = await resetFlow({ answers: ['abc', 'Sickle1Strong!'], pw: [null] });
-  const prompts = r.shown.filter(d => d.type === 'prompt').map(d => d.msg);
-  check('Too-short password: reason shown, server not asked for it', prompts.length === 2 && r.calls.filter(c => c[0] === 'updateUser').length === 1);
+  check('Too-short password: reason shown, server not asked for it', /at least 8/.test(r.forms[1]?.error || '') && r.calls.filter(c => c[0] === 'updateUser').length === 1);
   await r.page.context().close();
 }
 
-// ── 3. Gives up gracefully after three refusals ──
+// ── 3. Keeps trying on the same link; "Not now" leaves the password alone ──
 {
-  const r = await resetFlow({ answers: ['Password1', 'Password1', 'Password1'], pw: [PWNED, PWNED, PWNED] });
-  const last = r.shown.filter(d => d.type === 'alert').at(-1)?.msg || '';
-  check('After three refusals: explains and points to a fresh link', /data breach/.test(last) && /Forgot your password/.test(last));
+  const r = await resetFlow({ answers: ['Password1', 'Password1', 'Password1', 'Password1', null], pw: [PWNED, PWNED, PWNED, PWNED] });
+  check('Four refusals: still offered another try (no fresh email needed)', r.forms.length === 5 && /data breach/.test(r.forms[4]?.error || ''));
+  check('"Not now" closes it and says the password is unchanged', !r.open && /hasn't changed/.test(r.notices.at(-1) || ''));
   await r.page.context().close();
 }
 

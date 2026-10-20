@@ -40,10 +40,10 @@ node tests/sign-out.test.mjs                 # 15 checks — sign out clears the
 node tests/offline-sync.test.mjs             # 27 checks — outbox retry + sync merge
 node tests/first-run.test.mjs                # 20 checks — setup wording, phone layout, honest copy
 node tests/teen-access.test.mjs              # 11 checks — 13–17 join by parent invite; under 13 blocked
-node tests/password-reset.test.mjs           # 13 checks — clear password reasons; invite survives a reset
+node tests/password-reset.test.mjs           # 16 checks — in-app reset form, clear reasons; invite survives
 node tests/logged-by.test.mjs                # 12 checks — "Logged by" names; pain saved as rated 2–10
 node tests/teen-approval.test.mjs            # 22 checks — teen self sign-up, parent approval
-node tests/quiet-messages.test.mjs           # 20 checks — no alert()/confirm(); 14px+ text at 360px
+node tests/quiet-messages.test.mjs           # 26 checks — no alert()/confirm()/prompt(); 14px+ text at 360px
 node tests/cloud-edits.test.mjs              # 8 checks — synced records' buttons work; edits/deletes reach the cloud
 node tests/push-reminders.test.mjs           # 40 checks — Web Push encryption, reminder schedule, enable/disable
 ```
@@ -287,8 +287,10 @@ evidence the scheme is safe. Run it after touching any render function.
   raw text (set via `textContent`), so don't escape what you pass them.
   `showToast()` is the short-line primitive underneath. Neither uses the
   `.modal` class, on purpose: code that closes every `.modal` must not
-  swallow a message. The password-reset flow and the clipboard fallback still
-  use `prompt()`, which needs replacing with in-app forms.
+  swallow a message. No `prompt()` either: the new password after a reset
+  is typed into `showNewPasswordForm()` (hidden by default, Show toggle,
+  retries on the same link), and a copy the browser refuses falls back to
+  `showCopyFallback()`.
 - Text is at least 16px for reading and 14px for labels; form controls
   default to 16px (iPhone zooms into smaller inputs). The one exception is the
   bottom tab bar on phones: 12px, with short names (Log, SOS, Connect) so

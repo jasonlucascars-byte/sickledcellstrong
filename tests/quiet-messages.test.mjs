@@ -32,6 +32,9 @@ const script = readFileSync(INDEX, 'utf8').match(/<script>([\s\S]*?)<\/script>/)
   .split('\n').filter(l => !l.trim().startsWith('//')).join('\n');
 check('App script calls no alert()', !/(?<![\w.])alert\(/.test(script));
 check('App script calls no confirm()', !/(?<![\w.])confirm\(/.test(script));
+// The install banner's deferredInstallPrompt.prompt() is the browser's own
+// install sheet, not a dialog; anything else named prompt( is.
+check('App script calls no prompt()', !/(?<![\w.])prompt\(/.test(script));
 
 const browser = await chromium.launch({ executablePath: CHROMIUM });
 const page = await browser.newPage({ viewport: { width: 360, height: 760 } });
@@ -129,6 +132,43 @@ check('Confirm: a tap outside the card answers no', c.outside === false);
 check('Confirm: shows the action name on the button', /Remove/.test(c.labels) && /Cancel/.test(c.labels));
 check('Deleting a medication: Cancel keeps it', c.cancelKept);
 check('Deleting a medication: Delete removes it', c.deleteRemoved);
+
+// ── Last-resort copy card (browser refuses to copy) ──
+const cp = await page.evaluate(async () => {
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined });
+  document.execCommand = () => false;
+  await copyTextToClipboard('https://sicklestrong-v2.netlify.app/?invite=INV-AB12CD34', 'Invite link');
+  const c = document.getElementById('ssCopy');
+  const box = document.getElementById('ssCopyText');
+  const r = { shown: !!c, text: box?.value, selected: box && box.selectionStart === 0 && box.selectionEnd === box.value.length, readonly: box?.readOnly, px: box ? parseFloat(getComputedStyle(box).fontSize) : 0 };
+  c?.querySelector('button')?.click();
+  r.closes = !document.getElementById('ssCopy');
+  return r;
+});
+check('Copy fallback: shows the link in the app, selected and ready to copy', cp.shown && cp.text?.endsWith('INV-AB12CD34') && cp.readonly && cp.px >= 16, JSON.stringify(cp));
+check('Copy fallback: Done closes it', cp.closes);
+
+// ── New-password form ──
+const pf = await page.evaluate(async () => {
+  showNewPasswordForm();
+  const input = document.getElementById('ssPwInput');
+  const r = { hidden: input.type === 'password', autocomplete: input.autocomplete };
+  document.getElementById('ssPwShow').click();
+  r.shows = input.type === 'text';
+  document.getElementById('ssPwShow').click();
+  r.hidesAgain = input.type === 'password';
+  input.value = 'Abcdefg1'; input.dispatchEvent(new Event('input'));
+  r.allTicked = [...document.querySelectorAll('#ssPwRules li')].every(li => li.textContent.startsWith('✓'));
+  input.value = 'abc'; input.dispatchEvent(new Event('input'));
+  r.someOpen = [...document.querySelectorAll('#ssPwRules li')].filter(li => li.textContent.startsWith('○')).length === 3;
+  r.notModal = !document.getElementById('ssPwReset').classList.contains('modal');
+  document.getElementById('ssPwCancel').click();
+  r.closed = !document.getElementById('ssPwReset');
+  return r;
+});
+check('Password form: hidden by default, Show/Hide works', pf.hidden && pf.shows && pf.hidesAgain && pf.autocomplete === 'new-password');
+check('Password form: rules tick off as you type', pf.allTicked && pf.someOpen);
+check('Password form: separate from .modal and closes on "Not now"', pf.notModal && pf.closed);
 
 // ── Readable text and phone layout across every tab ──
 const layout = [];
