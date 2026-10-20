@@ -41,6 +41,7 @@ node tests/offline-sync.test.mjs             # 27 checks — outbox retry + sync
 node tests/first-run.test.mjs                # 20 checks — setup wording, phone layout, honest copy
 node tests/teen-access.test.mjs              # 11 checks — 13–17 join by parent invite; under 13 blocked
 node tests/password-reset.test.mjs           # 13 checks — clear password reasons; invite survives a reset
+node tests/logged-by.test.mjs                # 10 checks — "Logged by" names; pain saved as rated 2–10
 ```
 
 Tests are plain `.mjs` scripts run directly by Node — there is no test runner,

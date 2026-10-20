@@ -2738,6 +2738,7 @@
                             <div style="font-size: 24px;">${escapeHtml(note.mood)}</div>
                         </div>
                         <div style="font-size: 14px; line-height: 1.6; color: var(--text);">${escapeHtml(note.text)}</div>
+                        ${loggedByHtml(note)}
                     </div>
                 `;
             });
@@ -3897,6 +3898,15 @@
             }
         }
 
+        // "Logged by Kim" on entries someone else made; nothing on your own, or
+        // when the author can't be named (removed from the circle since).
+        function loggedByHtml(entry) {
+            if (!entry || !entry.loggedById || !entry.loggedByName) return '';
+            if (appData.myUserId && entry.loggedById === appData.myUserId) return '';
+            const first = String(entry.loggedByName).trim().split(/\s+/)[0];
+            return `<div style="font-size:11px;color:var(--text-light);margin-top:6px;">Logged by ${escapeHtml(first)}</div>`;
+        }
+
         function renderSymptomHistory() {
             const child = getCurrentChild();
             const container = document.getElementById('symptomHistory');
@@ -3987,6 +3997,7 @@
                                          style="width:100%;max-height:140px;object-fit:cover;
                                                 border-radius:10px;border:1px solid var(--border);">
                                 </div>` : ''}
+                            ${loggedByHtml(s)}
                         </div>
                     `;
 
@@ -4010,6 +4021,7 @@
                             ${p.helped && p.helped.length > 0 ? `<div style="font-size:12px;color:var(--text-light);margin-top:3px;">💙 Helped: ${p.helped.map(escapeHtml).join(', ')}</div>` : ''}
                             ${p.notes ? `<div style="font-size:12px;font-style:italic;color:var(--text-mid);margin-top:4px;">"${escapeHtml(p.notes)}"</div>` : ''}
                             ${p.photoUri ? `<img src="${escapeHtml(p.photoUri)}" style="width:100%;max-height:120px;object-fit:cover;border-radius:10px;margin-top:8px;">` : ''}
+                            ${loggedByHtml(p)}
                         </div>
                     `;
 
@@ -4031,6 +4043,7 @@
                                 <span style="font-size:11px;color:var(--text-light);">${timeStr}</span>
                             </div>
                             ${t.notes ? `<div style="font-size:12px;font-style:italic;color:var(--text-mid);margin-top:6px;">"${escapeHtml(t.notes)}"</div>` : ''}
+                            ${loggedByHtml(t)}
                         </div>
                     `;
                 }
@@ -7586,6 +7599,12 @@
         }
 
         function _fillFromLocal(cloudEntry, localEntry) {
+            // Pain saved before the 1–10 fix was clamped to 5 in the cloud; the
+            // phone that logged it still holds the real level, so keep it.
+            if (typeof localEntry.level === 'number' && typeof cloudEntry.level === 'number'
+                && localEntry.level > cloudEntry.level && cloudEntry.level === 5) {
+                cloudEntry.level = localEntry.level;
+            }
             for (const [k, v] of Object.entries(localEntry)) {
                 if (v === undefined || v === null) continue;
                 const cv = cloudEntry[k];
@@ -7685,8 +7704,11 @@
             const { data: { user } } = await sb.auth.getUser();
             if (!user) return;
 
-            const { data: dbUser } = await sb.from('users').select('family_id').eq('auth_id', user.id).maybeSingle();
+            const { data: dbUser } = await sb.from('users').select('id, family_id').eq('auth_id', user.id).maybeSingle();
             _cachedFamilyId = dbUser?.family_id || null;
+            // Kept so "Logged by" is shown only on other people's entries,
+            // including while offline before the next sync.
+            if (dbUser?.id) appData.myUserId = dbUser.id;
 
             // Scoped by child, never by family. A caregiver invited to one child
             // must not see that child's siblings — and may not even share a
@@ -7729,6 +7751,22 @@
                 sb.from('weight_logs').select('*').in('child_id', childIds).order('logged_at', { ascending: false }).limit(100),
                 sb.from('notes').select('*').in('child_id', childIds).order('created_at', { ascending: false }).limit(100)
             ]);
+
+            // Names for "Logged by". The database stamps logged_by / created_by
+            // from the signed-in account; users_select lets you read the people
+            // who share a child with you, so a removed caregiver's name simply
+            // doesn't resolve and their entries show no label.
+            const authorIds = [...new Set([
+                ...(painLogs || []), ...(tempLogs || []), ...(symptomRows || []), ...(weightRows || [])
+            ].map(r => r.logged_by).concat((noteRows || []).map(n => n.created_by)).filter(Boolean))];
+            const authorName = {};
+            if (authorIds.length) {
+                try {
+                    const { data: authors } = await sb.from('users').select('id, full_name').in('id', authorIds);
+                    (authors || []).forEach(a => { authorName[a.id] = a.full_name || ''; });
+                } catch (e) {}
+            }
+            const by = (id) => (id ? { loggedById: id, loggedByName: authorName[id] || '' } : {});
 
             if (children && children.length > 0) {
                 appData.children = children.map((c, idx) => {
@@ -7791,12 +7829,14 @@
                             notes: p.notes,
                             requiredER: p.required_er_visit || false,
                             startTime: cloudTime(p.logged_at),
-                            resolved: false
+                            resolved: false,
+                            ...by(p.logged_by)
                         })),
                         temperatureLog: childTemp.map(t => ({
                             id: t.id,
                             temperature: Number(t.temperature_f),
-                            timestamp: cloudTime(t.logged_at)
+                            timestamp: cloudTime(t.logged_at),
+                            ...by(t.logged_by)
                         })),
                         symptoms: childSymp.map(s => ({
                             id: s.id,
@@ -7807,7 +7847,8 @@
                             severity: s.severity,
                             notes: s.notes,
                             photo: s.photo_url,
-                            helped: []
+                            helped: [],
+                            ...by(s.logged_by)
                         })),
                         weightHistory: childWt.map(w => ({
                             id: w.id,
@@ -7815,6 +7856,7 @@
                             weightDisplay: `${w.weight_lbs} lbs`,
                             date: w.logged_at ? w.logged_at.split('T')[0] : '',
                             timestamp: cloudTime(w.logged_at),
+                            ...by(w.logged_by),
                             context: w.context,
                             notes: w.notes
                         })),
@@ -7823,7 +7865,8 @@
                             date: cloudTime(n.created_at),
                             mood: (n.mood_tags || [])[0] || '😊',
                             text: n.content,
-                            title: n.title
+                            title: n.title,
+                            ...by(n.created_by)
                         }))
                     };
                 });
@@ -8079,8 +8122,10 @@
         }
 
         async function _pushPainLog(entry, childId, familyId) {
-            // pain_logs.severity is CHECK 1-5 in DB
-            const severity = Math.min(5, Math.max(1, Math.round(entry.level)));
+            // The app rates pain 2–10. pain_logs.severity used to be CHECK 1–5,
+            // and this clamped every 6, 8 and 10 down to 5 — an 8 reached other
+            // caregivers and doctor reports as "5/10". The check is now 1–10.
+            const severity = Math.min(10, Math.max(1, Math.round(entry.level)));
             return sb.from('pain_logs').insert({
                 id: entry.cloudId,
                 child_id: childId,
