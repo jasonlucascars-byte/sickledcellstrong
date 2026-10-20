@@ -3917,8 +3917,17 @@
         function loggedByHtml(entry) {
             if (!entry || !entry.loggedById || !entry.loggedByName) return '';
             if (appData.myUserId && entry.loggedById === appData.myUserId) return '';
-            const first = String(entry.loggedByName).trim().split(/\s+/)[0];
+            // An email standing in for a name shows only the part before the @.
+            const first = String(entry.loggedByName).trim().split('@')[0].split(/\s+/)[0];
             return `<div style="font-size:11px;color:var(--text-light);margin-top:6px;">Logged by ${escapeHtml(first)}</div>`;
+        }
+
+        async function saveAccountName(name) {
+            try {
+                const { data: { session } } = await sb.auth.getSession();
+                if (!session?.user) return;
+                cloudSync(() => sb.from('users').update({ full_name: name }).eq('auth_id', session.user.id));
+            } catch (e) {}
         }
 
         function renderSymptomHistory() {
@@ -6758,6 +6767,9 @@
             appData.parentName = document.getElementById('settingsParentName').value.trim();
             appData.parentRelation = document.getElementById('settingsParentRelation').value.trim();
             saveData();
+            // This name is what other caregivers see ("Logged by …"), so it
+            // goes to the account too; users_update_self allows your own row.
+            if (appData.parentName) saveAccountName(appData.parentName);
             document.querySelector('.modal').remove();
             setTimeout(() => alert('✅ Settings saved'), 100);
         }
@@ -7718,7 +7730,13 @@
             const { data: { user } } = await sb.auth.getUser();
             if (!user) return;
 
-            const { data: dbUser } = await sb.from('users').select('id, family_id').eq('auth_id', user.id).maybeSingle();
+            const { data: dbUser } = await sb.from('users').select('id, family_id, full_name').eq('auth_id', user.id).maybeSingle();
+            // Accounts made before names were asked for carry their email as
+            // full_name, which is what other caregivers would see. If this
+            // phone knows a real name, use it.
+            if (dbUser && (!dbUser.full_name || dbUser.full_name.includes('@')) && appData.parentName) {
+                saveAccountName(appData.parentName);
+            }
             _cachedFamilyId = dbUser?.family_id || null;
             // Kept so "Logged by" is shown only on other people's entries,
             // including while offline before the next sync.
