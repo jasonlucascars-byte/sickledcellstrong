@@ -83,6 +83,17 @@ the UI** and cloud writes are best-effort:
   the cloud no longer has was removed by someone with access and stays gone.
   Never replace this with a plain overwrite: that is the bug that silently
   deleted offline pain crises. `tests/offline-sync.test.mjs` pins it.
+- Authorship is stamped by the database: BEFORE INSERT triggers
+  (`stamp_logged_by` / `stamp_created_by`) set `logged_by` / `created_by`
+  from the signed-in account, overriding anything the app sends. Sync maps it
+  to `loggedById` / `loggedByName`; `loggedByHtml()` shows "Logged by <first
+  name>" on other people's entries only (`appData.myUserId`). The name comes
+  from `users.full_name`, which Settings keeps in step with the name entered
+  there.
+- Pain is rated 2–10 (faces labeled in ranges, saving the top of each) and
+  stored as rated; `pain_logs.severity` is CHECK 1–10. It used to be 1–5 and
+  the app clamped to 5, so old cloud rows may read 5 for a 6–10; the merge
+  keeps the phone's higher level. Show `painLevelLabel()`, not a bare number.
 - Cloud timestamps are `timestamp without time zone` written as UTC; read
   them through `cloudTime()`, or they display hours off.
 - Boot (`DOMContentLoaded`) wraps all cloud work in `try/catch` — a network
