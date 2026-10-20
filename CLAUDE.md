@@ -40,6 +40,7 @@ node tests/sign-out.test.mjs                 # 15 checks — sign out clears the
 node tests/offline-sync.test.mjs             # 27 checks — outbox retry + sync merge
 node tests/first-run.test.mjs                # 20 checks — setup wording, phone layout, honest copy
 node tests/teen-access.test.mjs              # 11 checks — 13–17 join by parent invite; under 13 blocked
+node tests/password-reset.test.mjs           # 13 checks — clear password reasons; invite survives a reset
 ```
 
 Tests are plain `.mjs` scripts run directly by Node — there is no test runner,
@@ -93,7 +94,9 @@ copy didn't save.
 
 Other `localStorage` keys: `ss_auth` (session mirror), `ss_auth_dismissed`
 (suppresses the account prompt), `ss_install_dismissed`, `ss_outbox` (log
-entries waiting to upload — see above), `ss_unsynced` (set when a non-queued
+entries waiting to upload — see above), `ss_pending_invite` (an invite code
+kept through a password reset, redeemed on the next signed-in open, 14-day
+limit), `ss_unsynced` (set when a non-queued
 write fails or runs offline, or the cloud permanently rejects a queued one;
 sign-out warns before erasing either), and `ss_accounts` — a **read-only
 legacy** pre-Supabase account store; nothing writes it.

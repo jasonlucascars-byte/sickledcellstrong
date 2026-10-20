@@ -8646,6 +8646,28 @@
         // recovery session, so the new password is set with updateUser. Detected
         // from the URL fragment, which is why it runs before the normal boot
         // paths decide what to show.
+        // Turns a Supabase password rejection into words a parent can act on.
+        // Returns null when the problem isn't the password itself (an expired
+        // link, a network failure), so the caller knows a retry here won't help.
+        // Kim hit this on 2026-10-19: two passwords were refused (most likely
+        // the breached-password check), the app blamed an expired link, and she
+        // went through four reset emails before one stuck.
+        function passwordErrorReason(error) {
+            const code = (error && error.code) || '';
+            const msg = ((error && error.message) || '').toLowerCase();
+            const reasons = (error && error.reasons) || [];
+            if (reasons.includes('pwned') || /pwned|breach|leaked/.test(msg)) {
+                return 'That password has shown up in a known data breach, so it isn\'t safe to use. Please choose a different one.';
+            }
+            if (code === 'same_password' || /different from the old/.test(msg)) {
+                return "That's the password you already have. Please choose a new one.";
+            }
+            if (code === 'weak_password' || /weak|at least|should contain|characters/.test(msg)) {
+                return "That password isn't strong enough. Use at least 8 characters, with a capital letter and a number.";
+            }
+            return null;
+        }
+
         async function handlePasswordRecovery() {
             const hash = String(location.hash || '');
             if (!hash.includes('type=recovery')) return false;
@@ -8654,23 +8676,32 @@
             // don't sit in the address bar.
             history.replaceState(null, '', location.pathname + location.search);
 
-            const next = prompt('Choose a new password for your SickleStrong account\n\n(at least 8 characters, with a capital letter and a number):');
-            if (!next) {
-                alert("No problem — your password hasn't changed.\n\nYou can tap 'Forgot your password?' again whenever you're ready.");
-                return true;
-            }
-            const nextProblem = passwordProblem(next);
-            if (nextProblem) {
-                alert(`${nextProblem}\n\nTap "Forgot your password?" to get a fresh link and try again.`);
-                return true;
-            }
+            // The reset link signs them in once; a rejected password doesn't end
+            // that session, so ask again right here instead of sending them back
+            // to their inbox for another link.
+            let reason = '';
+            for (let attempt = 1; attempt <= 3; attempt++) {
+                const next = prompt((reason ? `${reason}\n\n` : '') +
+                    'Choose a new password for your SickleStrong account\n\n(at least 8 characters, with a capital letter and a number):');
+                if (!next) {
+                    alert("No problem — your password hasn't changed.\n\nYou can tap 'Forgot your password?' again whenever you're ready.");
+                    return true;
+                }
+                const localProblem = passwordProblem(next);
+                if (localProblem) { reason = localProblem; continue; }
 
-            const { error } = await sb.auth.updateUser({ password: next });
-            if (error) {
-                alert(`We couldn't set that password.\n\n${error.message}\n\nReset links expire after a while — request a fresh one and try again.`);
-                return true;
+                const { error } = await sb.auth.updateUser({ password: next });
+                if (!error) {
+                    alert('Your password is updated. 💙\n\nYou\'re signed in now — your records are right where you left them.');
+                    return true;
+                }
+                reason = passwordErrorReason(error);
+                if (!reason) {
+                    alert(`We couldn't set that password.\n\n${error.message}\n\nTap "Forgot your password?" for a fresh link and try again.`);
+                    return true;
+                }
             }
-            alert('Your password is updated. 💙\n\nYou\'re signed in now — your records are right where you left them.');
+            alert(`${reason}\n\nWhen you're ready, tap "Forgot your password?" for a fresh link.`);
             return true;
         }
 
@@ -8712,9 +8743,10 @@
             // Someone with an existing account who opened an invite link and
             // chose "I already have an account" finishes here.
             let invitedChildName = null;
-            if (_pendingInviteAfterLogin) {
-                const code = _pendingInviteAfterLogin;
+            if (_pendingInviteAfterLogin || readPendingInvite()) {
+                const code = _pendingInviteAfterLogin || readPendingInvite();
                 _pendingInviteAfterLogin = null;
+                clearPendingInvite();
                 const { data: redeemed, error: redeemError } = await sb.rpc('redeem_child_invite', {
                     p_code: code, p_full_name: null
                 });
@@ -8884,7 +8916,7 @@
                 options: { data: { full_name: name, role }, emailRedirectTo: APP_URL }
             });
             if (error) {
-                alert('Sign up failed: ' + error.message); return;
+                alert(passwordErrorReason(error) || ('Sign up failed: ' + error.message)); return;
             }
 
             // No session yet = email confirmation pending. Do NOT attempt any
@@ -9091,6 +9123,9 @@
             });
 
             if (error || !data || data.length === 0) {
+                // A refusal (used, expired, not found) won't change on retry;
+                // only a network failure is worth keeping the code for.
+                if (error && !/fetch|network/i.test(error.message || '')) clearPendingInvite();
                 const message = inviteErrorMessage(error);
                 console.warn('[SickleStrong] invite redemption failed', error);
                 alert(message || "We couldn't open that invite just now. Please try again in a moment.");
@@ -9098,6 +9133,7 @@
             }
 
             const row = data[0];
+            clearPendingInvite();
             familyAuth.isLoggedIn = true;
             familyAuth.familyCode = row.out_family_code;
             localStorage.setItem('ss_auth_dismissed', 'true');
@@ -9199,6 +9235,7 @@
             });
             modal.querySelector('#inviteSignIn').addEventListener('click', () => {
                 _pendingInviteAfterLogin = code;
+                savePendingInvite(code);
                 modal.remove();
                 document.getElementById('authScreen').classList.add('active');
                 switchAuthTab('login');
@@ -9210,6 +9247,25 @@
         // Set when someone with an existing account opens an invite link, so
         // handleLogin can finish the redemption straight after they sign in.
         let _pendingInviteAfterLogin = null;
+
+        // The same code, kept in localStorage too. A forgotten password sends
+        // them through a reset email that lands on the bare app URL in a fresh
+        // tab, so memory alone lost the invite and they had to reopen the link.
+        // Invites last 14 days; a stored one older than that is dropped.
+        function savePendingInvite(code) {
+            try { localStorage.setItem('ss_pending_invite', JSON.stringify({ code, at: Date.now() })); } catch (e) {}
+        }
+        function readPendingInvite() {
+            try {
+                const v = JSON.parse(localStorage.getItem('ss_pending_invite') || 'null');
+                if (!v || !/^INV-[A-Z0-9]{8}$/.test(v.code || '')) return null;
+                if (Date.now() - (v.at || 0) > 14 * 86400000) { localStorage.removeItem('ss_pending_invite'); return null; }
+                return v.code;
+            } catch (e) { return null; }
+        }
+        function clearPendingInvite() {
+            try { localStorage.removeItem('ss_pending_invite'); } catch (e) {}
+        }
 
         async function submitInviteSignup(code, modal) {
             const name = modal.querySelector('#inviteName').value.trim();
@@ -9248,7 +9304,7 @@
                 options: { data: { full_name: name, role: 'caregiver', pending_invite_code: code,
                                    age_band: age === 'teen' ? '13-17' : '18+' }, emailRedirectTo: APP_URL }
             });
-            if (error) return showError(error.message);
+            if (error) return showError(passwordErrorReason(error) || error.message);
 
             if (!data.session) {
                 modal.remove();
@@ -9955,7 +10011,7 @@
                 try {
                     Object.keys(localStorage)
                         .filter(k => k === 'sickleStrongData' || k === 'ss_auth' || k === 'ss_auth_dismissed'
-                                  || k === 'ss_unsynced' || k === OUTBOX_KEY || k.startsWith('sb-'))
+                                  || k === 'ss_unsynced' || k === 'ss_pending_invite' || k === OUTBOX_KEY || k.startsWith('sb-'))
                         .forEach(k => localStorage.removeItem(k));
                 } catch (e) {}
                 location.reload();
@@ -10525,6 +10581,12 @@
             // Last, so it opens over a fully rendered app rather than racing it.
             if (pendingInvite) {
                 await handleInviteLink(pendingInvite);
+            } else if (readPendingInvite()) {
+                // Usually right after a password reset: they're signed in now,
+                // so connect them to the child they were invited to.
+                let hasSession = false;
+                try { hasSession = !!(await sb.auth.getSession()).data.session; } catch (e) {}
+                if (hasSession) await redeemInviteNow(readPendingInvite(), null);
             } else if (pendingJoin) {
                 await handleJoinLink(pendingJoin);
             }
