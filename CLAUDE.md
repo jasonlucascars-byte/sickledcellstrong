@@ -44,6 +44,7 @@ node tests/password-reset.test.mjs           # 13 checks — clear password reas
 node tests/logged-by.test.mjs                # 12 checks — "Logged by" names; pain saved as rated 2–10
 node tests/teen-approval.test.mjs            # 22 checks — teen self sign-up, parent approval
 node tests/quiet-messages.test.mjs           # 20 checks — no alert()/confirm(); 14px+ text at 360px
+node tests/cloud-edits.test.mjs              # 8 checks — synced records' buttons work; edits/deletes reach the cloud
 ```
 
 Tests are plain `.mjs` scripts run directly by Node — there is no test runner,
@@ -264,5 +265,9 @@ evidence the scheme is safe. Run it after touching any render function.
   default to 16px (iPhone zooms into smaller inputs). The one exception is the
   bottom tab bar on phones: 12px, with short names (Log, SOS, Connect) so
   seven fit in 360px. `tests/quiet-messages.test.mjs` checks every tab.
+- Record ids are numbers for records made on this phone and uuid strings
+  for records from the cloud. Pass them to inline handlers quoted —
+  `onclick="fn('${jsArg(rec.id)}')"`, never `fn(${rec.id})`, which is a
+  syntax error for a uuid — and compare with `String(a) === String(b)`.
 - Prefer event listeners over inline `onclick` when interpolating user data — a
   name containing a quote would otherwise break out of the attribute.

@@ -4975,7 +4975,7 @@
                                     ? `<div style="font-size:14px;color:var(--primary);margin-top:3px;font-weight:600;">👨‍⚕️ Dr. ${escapeHtml(med.doctor)}</div>`
                                     : ''}
                             </div>
-                            <button data-requires="full" onclick="editMedication(${med.id})"
+                            <button data-requires="full" onclick="editMedication('${jsArg(med.id)}')"
                                     style="background:white;border:1.5px solid var(--border);border-radius:10px;
                                            padding:6px 12px;font-size:14px;font-weight:600;cursor:pointer;
                                            color:var(--text-mid);font-family:'Sora',sans-serif;
@@ -4991,7 +4991,7 @@
                             ${times.map((time, idx) => {
                                 const taken = takenToday.includes(time);
                                 return `
-                                    <button onclick="takeMedication(${med.id}, '${jsArg(time)}')"
+                                    <button onclick="takeMedication('${jsArg(med.id)}', '${jsArg(time)}')"
                                             style="display:flex;align-items:center;gap:6px;
                                                    padding:7px 12px;border-radius:10px;border:none;
                                                    background:${taken ? 'var(--success)' : 'white'};
@@ -5024,7 +5024,7 @@
 
         function takeMedication(medId, time) {
             const child = getCurrentChild();
-            const med = child.medications.find(m => m.id === medId);
+            const med = child.medications.find(m => String(m.id) === String(medId));
             if (!med) return;
 
             if (!med.takenToday) med.takenToday = [];
@@ -5393,7 +5393,7 @@
                                     ${contact.notes ? `<div style="font-size:14px;color:var(--text-mid);font-style:italic;margin-top:2px;">${escapeHtml(contact.notes)}</div>` : ''}
                                 </div>
                             </div>
-                            <button data-requires="full" onclick="showAddContact(${contact.id})"
+                            <button data-requires="full" onclick="showAddContact('${jsArg(contact.id)}')"
                                     style="background:white;border:1.5px solid var(--border);border-radius:10px;
                                            padding:5px 10px;font-size:14px;font-weight:600;cursor:pointer;
                                            color:var(--text-mid);font-family:'Sora',sans-serif;flex-shrink:0;margin-left:8px;">
@@ -6310,7 +6310,7 @@
 
         function showAddContact(editId = null) {
             if (!requirePermission('full')) return;
-            const existing = editId ? appData.contacts.find(c => c.id === editId) : null;
+            const existing = editId ? appData.contacts.find(c => String(c.id) === String(editId)) : null;
 
             const modal = document.createElement('div');
             modal.className = 'modal active';
@@ -6401,11 +6401,11 @@
                     <div class="modal-actions">
                         ${existing ? `
                         <button class="btn btn-secondary" style="flex:1;"
-                                onclick="deleteContact(${existing.id})">🗑️ Delete</button>` : `
+                                onclick="deleteContact('${jsArg(existing.id)}')">🗑️ Delete</button>` : `
                         <button class="btn btn-secondary" style="flex:1;"
                                 onclick="this.closest('.modal').remove()">Cancel</button>`}
                         <button class="btn btn-primary" style="flex:2;"
-                                onclick="saveNewContact(${editId || 'null'})">
+                                onclick="saveNewContact(${editId ? `'${jsArg(editId)}'` : 'null'})">
                             ${existing ? '✅ Save Changes' : '📞 Add Contact'}
                         </button>
                     </div>
@@ -6455,10 +6455,10 @@
 
             let savedContact;
             if (editId) {
-                savedContact = appData.contacts.find(c => c.id === editId);
+                savedContact = appData.contacts.find(c => String(c.id) === String(editId));
                 if (savedContact) Object.assign(savedContact, contactData);
             } else {
-                savedContact = { id: Date.now(), ...contactData };
+                savedContact = { id: newUUID(), ...contactData };
                 appData.contacts.push(savedContact);
             }
 
@@ -6479,11 +6479,15 @@
 
         async function deleteContact(id) {
             if (!requirePermission('full')) return;
-            const contact = appData.contacts.find(c => c.id === id);
+            const contact = appData.contacts.find(c => String(c.id) === String(id));
             if (!contact) return;
             if (!(await askConfirm(`Remove ${contact.name} from emergency contacts?`, { okLabel: 'Remove', danger: true }))) return;
-            appData.contacts = appData.contacts.filter(c => c.id !== id);
+            appData.contacts = appData.contacts.filter(c => String(c.id) !== String(id));
             saveData();
+            // Deletes used to stay on the phone, so the next sync brought the
+            // contact straight back.
+            const cid = looksLikeUUID(contact.id) ? contact.id : contact.cloudId;
+            if (cid && hasAccountOnDevice()) cloudSync(() => sb.from('contacts').delete().eq('id', cid));
             document.querySelector('.modal.active')?.remove();
             updateUI();
         }
@@ -8269,7 +8273,11 @@
                 notes: contact.notes || null,
                 is_primary: contact.isPrimary || false
             };
-            if (isUUID) payload.id = contact.id;
+            // A contact made before it had a cloud id used to upsert with no id,
+            // so every edit inserted another copy. Give it a permanent one.
+            let cid = isUUID ? contact.id : contact.cloudId;
+            if (!cid) { contact.cloudId = cid = newUUID(); saveData(); }
+            payload.id = cid;
             return sb.from('contacts').upsert(payload, { onConflict: 'id' });
         }
 
@@ -10463,7 +10471,7 @@
         function editMedication(id) {
             if (!requirePermission('full', "Your access doesn't allow changing medications.")) return;
             const child = getCurrentChild();
-            const med = child.medications.find(m => m.id === id);
+            const med = child.medications.find(m => String(m.id) === String(id));
             if (!med) return;
 
             const times = Array.isArray(med.times) ? med.times : ['08:00'];
@@ -10563,9 +10571,9 @@
 
                     <div class="modal-actions">
                         <button class="btn btn-secondary" style="flex:1;"
-                                onclick="deleteMedication(${id})">🗑️ Delete</button>
+                                onclick="deleteMedication('${jsArg(id)}')">🗑️ Delete</button>
                         <button class="btn btn-primary" style="flex:2;"
-                                onclick="saveEditedMedication(${id})">✅ Save Changes</button>
+                                onclick="saveEditedMedication('${jsArg(id)}')">✅ Save Changes</button>
                     </div>
                 </div>
             `;
@@ -10575,7 +10583,7 @@
         function saveEditedMedication(id) {
             if (!requirePermission('full', "Your access doesn't allow changing medications.")) return;
             const child = getCurrentChild();
-            const med = child.medications.find(m => m.id === id);
+            const med = child.medications.find(m => String(m.id) === String(id));
             if (!med) return;
 
             const name = document.getElementById('editMedName').value.trim();
@@ -10595,9 +10603,29 @@
             med.instructions = document.getElementById('editMedInstructions').value.trim();
 
             saveData();
+            _pushMedChange(med, {
+                name: med.name, dose: med.dose, times: med.times, type: med.type,
+                is_critical: !!med.critical, doctor: med.doctor || null,
+                pharmacy: med.pharmacy || null, refill_date: med.refillDate || null
+            });
             document.querySelector('.modal.active')?.remove();
             updateUI();
             setTimeout(() => notify(`✅ ${name} updated`), 100);
+        }
+
+        // Medication edits and deletes used to stay on the phone. The next
+        // sync rebuilt the list from the cloud, so a deleted medication came
+        // back and an edited dose or time reverted — and now that reminders
+        // are sent from the server, a stale cloud row would also keep pushing
+        // reminders for a medicine the child no longer takes. A delete is a
+        // soft delete (is_active = false): sync reads active rows only.
+        function _medCloudId(med) {
+            return med.cloudId || (looksLikeUUID(med.id) ? med.id : null);
+        }
+        function _pushMedChange(med, fields) {
+            const id = _medCloudId(med);
+            if (!id || !hasAccountOnDevice()) return; // never reached the cloud; nothing to change there
+            cloudSync(() => sb.from('medications').update(fields).eq('id', id));
         }
         
         async function deleteMedication(id) {
@@ -10605,9 +10633,11 @@
             if (!(await askConfirm('Delete this medication?', { okLabel: 'Delete', danger: true }))) return;
             
             const child = getCurrentChild();
-            child.medications = child.medications.filter(m => m.id !== id);
+            const removed = child.medications.find(m => String(m.id) === String(id));
+            child.medications = child.medications.filter(m => String(m.id) !== String(id));
             
             saveData();
+            if (removed) _pushMedChange(removed, { is_active: false });
             document.querySelector('.modal').remove();
             updateUI();
         }
