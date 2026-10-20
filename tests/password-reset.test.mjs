@@ -11,6 +11,7 @@
 // Run: node tests/password-reset.test.mjs
 
 import { chromium } from 'playwright';
+import { CAPTURE_NOTICES } from './notices-capture.mjs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
@@ -67,6 +68,7 @@ async function resetFlow({ answers, pw, pendingInvite = null }) {
     if (u.includes('@supabase')) return r.fulfill({ contentType: 'application/javascript', body: STUB });
     return r.abort();
   });
+  await page.addInitScript(CAPTURE_NOTICES);
   await page.addInitScript(({ pw, pendingInvite }) => {
     if (sessionStorage.getItem('__seeded')) return;
     sessionStorage.setItem('__seeded', '1');
@@ -79,6 +81,8 @@ async function resetFlow({ answers, pw, pendingInvite = null }) {
   await page.waitForTimeout(1200);
   const calls = await page.evaluate(() => window.__calls);
   const stored = await page.evaluate(() => localStorage.getItem('ss_pending_invite'));
+  // Notices replaced alert(); count them as alerts, after the prompts.
+  for (const msg of await page.evaluate(() => window.__notices)) shown.push({ type: 'alert', msg });
   return { page, shown, calls, stored };
 }
 

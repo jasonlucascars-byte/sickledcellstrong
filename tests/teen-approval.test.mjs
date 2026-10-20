@@ -8,6 +8,7 @@
 // Run: node tests/teen-approval.test.mjs
 
 import { chromium } from 'playwright';
+import { CAPTURE_NOTICES } from './notices-capture.mjs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
@@ -55,6 +56,7 @@ async function open(query = '') {
     if (u.includes('@supabase')) return r.fulfill({ contentType: 'application/javascript', body: STUB });
     return r.abort();
   });
+  await page.addInitScript(CAPTURE_NOTICES);
   await page.goto(INDEX_URL + query, { waitUntil: 'domcontentloaded' });
   await page.waitForFunction(() => typeof showTeenApproval === 'function');
   await page.waitForTimeout(300);
@@ -79,7 +81,7 @@ async function open(query = '') {
   }, { age, parentEmail });
 
   const kid = await signup('child');
-  check('Sign-up: under 13 is refused', !kid.made && /start at 13/.test(dialogs.at(-1) || ''));
+  check('Sign-up: under 13 is refused', !kid.made && /start at 13/.test((await page.evaluate(() => window.__notices)).at(-1) || ''));
   const noParent = await signup('teen', '');
   check('Sign-up: 13 to 17 asks for a parent email', noParent.parentShown && !noParent.made);
   const own = await signup('teen', 'MAYA@example.com');

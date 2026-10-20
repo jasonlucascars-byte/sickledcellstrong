@@ -43,6 +43,7 @@ node tests/teen-access.test.mjs              # 11 checks — 13–17 join by par
 node tests/password-reset.test.mjs           # 13 checks — clear password reasons; invite survives a reset
 node tests/logged-by.test.mjs                # 12 checks — "Logged by" names; pain saved as rated 2–10
 node tests/teen-approval.test.mjs            # 22 checks — teen self sign-up, parent approval
+node tests/quiet-messages.test.mjs           # 20 checks — no alert()/confirm(); 14px+ text at 360px
 ```
 
 Tests are plain `.mjs` scripts run directly by Node — there is no test runner,
@@ -248,7 +249,20 @@ evidence the scheme is safe. Run it after touching any render function.
 - User-facing copy is written for a worried parent, and share messages are
   written for a recipient who may not know what the app is or that the family
   is dealing with sickle cell disease. American spellings.
-- Use `showToast()` for things worth saying but not worth interrupting for;
-  `alert()` blocks the whole app and is wrong mid-onboarding.
+- Never call `alert()` or `confirm()` — they freeze sync and the outbox
+  until tapped, and some in-app browsers drop them silently. Use
+  `notify(message)` (a toast for a short line; a card with OK once the message
+  has a paragraph break or runs past ~110 chars) and
+  `await askConfirm(message, { okLabel, danger })`, which resolves
+  true/false — forgetting the `await` runs the action unconfirmed. Both take
+  raw text (set via `textContent`), so don't escape what you pass them.
+  `showToast()` is the short-line primitive underneath. Neither uses the
+  `.modal` class, on purpose: code that closes every `.modal` must not
+  swallow a message. The password-reset flow and the clipboard fallback still
+  use `prompt()`, which needs replacing with in-app forms.
+- Text is at least 16px for reading and 14px for labels; form controls
+  default to 16px (iPhone zooms into smaller inputs). The one exception is the
+  bottom tab bar on phones: 12px, with short names (Log, SOS, Connect) so
+  seven fit in 360px. `tests/quiet-messages.test.mjs` checks every tab.
 - Prefer event listeners over inline `onclick` when interpolating user data — a
   name containing a quote would otherwise break out of the attribute.
