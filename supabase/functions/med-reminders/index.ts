@@ -1,5 +1,5 @@
 // med-reminders — sends medication reminders to phones, even with the app
-// closed. Called every 5 minutes by pg_cron (see db/push-reminders.sql); does
+// closed. Called every 5 minutes by pg_cron (job "med-reminders"); does
 // nothing for anyone else.
 //
 // Deployed out of band like the rest of the database (no CI). The source

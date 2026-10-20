@@ -25,7 +25,11 @@ export interface Vapid {
 
 const enc = new TextEncoder();
 
-export function b64urlToBytes(s: string): Uint8Array {
+// Uint8Array<ArrayBuffer> (not the default ArrayBufferLike) is what Web
+// Crypto and fetch accept under TypeScript 5.7+.
+type Bytes = Uint8Array<ArrayBuffer>;
+
+export function b64urlToBytes(s: string): Bytes {
   const pad = '='.repeat((4 - (s.length % 4)) % 4);
   const bin = atob((s + pad).replace(/-/g, '+').replace(/_/g, '/'));
   return Uint8Array.from(bin, (c) => c.charCodeAt(0));
@@ -37,14 +41,14 @@ export function bytesToB64url(b: Uint8Array): string {
   return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
-function concat(...parts: Uint8Array[]): Uint8Array {
+function concat(...parts: Uint8Array[]): Bytes {
   const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
   let o = 0;
   for (const p of parts) { out.set(p, o); o += p.length; }
   return out;
 }
 
-async function hkdf(salt: Uint8Array, ikm: Uint8Array, info: Uint8Array, bytes: number): Promise<Uint8Array> {
+async function hkdf(salt: Bytes, ikm: Bytes, info: Bytes, bytes: number): Promise<Bytes> {
   const key = await crypto.subtle.importKey('raw', ikm, 'HKDF', false, ['deriveBits']);
   const bits = await crypto.subtle.deriveBits({ name: 'HKDF', hash: 'SHA-256', salt, info }, key, bytes * 8);
   return new Uint8Array(bits);
@@ -54,10 +58,10 @@ async function hkdf(salt: Uint8Array, ikm: Uint8Array, info: Uint8Array, bytes: 
 // parameters only so tests can pin them; callers leave them out.
 export async function encryptPayload(
   sub: PushSubscriptionKeys,
-  payload: Uint8Array,
-  salt: Uint8Array = crypto.getRandomValues(new Uint8Array(16)),
+  payload: Bytes,
+  salt: Bytes = crypto.getRandomValues(new Uint8Array(16)),
   serverKeys?: CryptoKeyPair,
-): Promise<Uint8Array> {
+): Promise<Bytes> {
   const uaPublic = b64urlToBytes(sub.p256dh);
   const authSecret = b64urlToBytes(sub.auth);
   if (uaPublic.length !== 65 || authSecret.length !== 16) throw new Error('bad subscription keys');
