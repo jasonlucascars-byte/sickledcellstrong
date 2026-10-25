@@ -98,6 +98,16 @@ check('Pain shows the face that was picked ("A lot · 7–8"), not a bare number
 check('Notes show who wrote them', out.noteShown);
 check('An email used as a name shows only the part before @', out.emailTrimmed);
 check('Saving your name in Settings updates your account name', out.nameSaved);
+// The doctor report read pain on the old 1–5 scale ("Highest 6 / 5").
+const rep = await page.evaluate(() => {
+  document.querySelectorAll('.modal').forEach(m => m.remove());
+  appData.children[0].painLog = [{ id: 1, level: 8, location: 'Chest', startTime: new Date().toISOString() }, { id: 2, level: 4, location: 'Legs', startTime: new Date(Date.now() - 864e5).toISOString() }];
+  showDoctorReport();
+  const t = document.querySelector('.modal')?.innerText || '';
+  document.querySelectorAll('.modal').forEach(m => m.remove());
+  return t;
+});
+check('Doctor report shows pain out of 10, never out of 5', /8 \/ 10/.test(rep) && /A lot · 7–8/.test(rep) && !/\d \/ ?5\b/.test(rep), rep.match(/.{0,20}\/ ?(5|10).{0,10}/g)?.join(' | '));
 check('No uncaught page errors', pageErrors.length === 0, [...new Set(pageErrors)].join(' | '));
 
 await browser.close();

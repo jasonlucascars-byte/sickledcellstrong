@@ -7028,18 +7028,18 @@
                             </div>
                             <div class="report-row">
                                 <span class="report-label">Average Severity</span>
-                                <span class="report-value">${avgSeverity} / 5</span>
+                                <span class="report-value">${avgSeverity} / 10</span>
                             </div>
                             <div class="report-row">
                                 <span class="report-label">Highest Severity</span>
-                                <span class="report-value ${parseInt(avgSeverity) >= 4 ? 'report-fever' : ''}">${Math.max(...painLogs.map(l => l.level || 0))} / 5</span>
+                                <span class="report-value ${Math.max(...painLogs.map(l => l.level || 0)) >= 7 ? 'report-fever' : ''}">${Math.max(...painLogs.map(l => l.level || 0))} / 10</span>
                             </div>
                             <div style="margin-top:10px;">
                                 ${painLogs.slice(0,8).map(log => `
                                     <div style="background:var(--bg);border-radius:10px;padding:10px 12px;margin-bottom:6px;">
                                         <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
                                             <span style="font-size:14px;font-weight:700;font-family:'Sora',sans-serif;">${new Date(log.startTime).toLocaleDateString('en-US',{month:'short',day:'numeric'})}</span>
-                                            <span style="font-size:14px;font-weight:700;color:${log.level >= 4 ? 'var(--emergency)' : log.level >= 3 ? 'var(--warning)' : 'var(--success)'};">Severity ${escapeHtml(log.level)}/5</span>
+                                            <span style="font-size:14px;font-weight:700;color:${log.level >= 7 ? 'var(--emergency)' : log.level >= 5 ? 'var(--warning)' : 'var(--success)'};">${escapeHtml(painLevelLabel(log.level))} (${escapeHtml(log.level)}/10)</span>
                                         </div>
                                         ${(log.location || '').split(', ').filter(Boolean).length > 0
                                             ? `<div style="margin-bottom:4px;">${(log.location || '').split(', ').filter(Boolean).map(loc => `<span class="pain-chip">${escapeHtml(loc)}</span>`).join('')}</div>` : ''}
@@ -7195,11 +7195,11 @@
                 `Crisis Admissions (ER/hospital): ${erVisits}`,
                 `Total Episodes: ${painLogs.length}`,
                 ...(painLogs.length > 0 ? [
-                    `Avg Severity:   ${(painLogs.reduce((a,b)=>a+(b.level||0),0)/painLogs.length).toFixed(1)} / 5`,
-                    `Highest:        ${Math.max(...painLogs.map(l=>l.level||0))} / 5`,
+                    `Avg Severity:   ${(painLogs.reduce((a,b)=>a+(b.level||0),0)/painLogs.length).toFixed(1)} / 10`,
+                    `Highest:        ${Math.max(...painLogs.map(l=>l.level||0))} / 10`,
                     '',
                     ...painLogs.map(l =>
-                        `  ${new Date(l.startTime).toLocaleDateString()} | Severity ${l.level}/5 | ${l.location || ''}${l.helped && l.helped.length ? ' | Helped: '+l.helped.join(', ') : ''}`
+                        `  ${new Date(l.startTime).toLocaleDateString()} | Pain ${l.level}/10 (${painLevelLabel(l.level)}) | ${l.location || ''}${l.helped && l.helped.length ? ' | Helped: '+l.helped.join(', ') : ''}`
                     )
                 ] : ['No pain episodes in this period.']),
                 '',

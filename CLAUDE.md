@@ -41,7 +41,7 @@ node tests/offline-sync.test.mjs             # 27 checks — outbox retry + sync
 node tests/first-run.test.mjs                # 20 checks — setup wording, phone layout, honest copy
 node tests/teen-access.test.mjs              # 11 checks — 13–17 join by parent invite; under 13 blocked
 node tests/password-reset.test.mjs           # 16 checks — in-app reset form, clear reasons; invite survives
-node tests/logged-by.test.mjs                # 12 checks — "Logged by" names; pain saved as rated 2–10
+node tests/logged-by.test.mjs                # 13 checks — "Logged by" names; pain saved as rated 2–10
 node tests/teen-approval.test.mjs            # 22 checks — teen self sign-up, parent approval
 node tests/quiet-messages.test.mjs           # 26 checks — no alert()/confirm()/prompt(); 14px+ text at 360px
 node tests/cloud-edits.test.mjs              # 8 checks — synced records' buttons work; edits/deletes reach the cloud
