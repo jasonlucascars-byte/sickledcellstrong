@@ -1620,6 +1620,20 @@
                     </div>
                 </div>
 
+                <!-- Share SickleStrong with another family. Not an invite: it
+                     grants nothing and says nothing about this family's child. -->
+                <div class="card" id="shareAppCard" style="margin-bottom:14px;">
+                    <div class="card-title" style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+                        <span style="font-size:20px;">💜</span>
+                        <span>Know a family facing sickle cell?</span>
+                    </div>
+                    <div style="font-size:16px;color:var(--text-light);margin-bottom:12px;">
+                        Pass SickleStrong along to a friend, a nurse, or a family from school. The message says nothing about your child.
+                    </div>
+                    <button class="btn btn-primary" id="shareAppBtn" onclick="showShareApp()" style="width:100%;">Share SickleStrong</button>
+                    <div id="shareAppCount" style="font-size:16px;color:var(--primary);font-weight:600;margin-top:10px;display:none;"></div>
+                </div>
+
                 <!-- Temperature Overview (All Children) -->
                 <div class="card" id="tempOverviewCard" style="margin-bottom: 20px;">
                     <div class="card-header">
@@ -8081,6 +8095,7 @@
 
             saveData();
             refreshPushSubscription(); // not awaited: reminders must never hold up the first render
+            refreshShareCount();       // same: a count on the share card, best-effort
             // Circles are loaded before the first render, not after: updateUI()
             // runs the permission gating, and with no circle data that fails
             // open — which would flash write controls a view-only caregiver
@@ -8571,6 +8586,309 @@
         // A tappable link, so an invite can go out as a text message and the
         // recipient never has to type a code by hand. Always built from
         // APP_URL — see the note there for why location.origin was wrong.
+        // ── Share SickleStrong with another family ─────────────────────────
+        // A parent who knows a family that needs the app (or a school nurse
+        // who knows several) passes it on. This is deliberately NOT an invite:
+        // the link opens the public landing page, grants no access to anything,
+        // and the message names no child, because the recipient is outside
+        // this family. A signed-in sharer's link carries their share code
+        // (FAM-XXXXXX), so they can see how many families joined through it —
+        // a count only, never who.
+        const LANDING_URL = 'https://sicklestrong-landing-v2.netlify.app/';
+        const REF_PATTERN = /^[A-Z]{2,8}-[A-Z0-9]{4,12}$/;
+        const REF_DAYS = 30;
+
+        function shareAppLinkFor(code) {
+            return code ? `${LANDING_URL}?ref=${encodeURIComponent(code)}#join` : `${LANDING_URL}#join`;
+        }
+
+        // Written for someone who may never have heard of the app, from a
+        // sender who may not want to say why they know about sickle cell.
+        function shareAppMessage(link) {
+            return 'I wanted to pass this along. SickleStrong is an app for families living with '
+                + 'sickle cell disease. It keeps track of pain, fevers, and medicines, and makes '
+                + 'reports for doctors and schools.\n\n' + link + '\n\n' + NOTHING_TO_INSTALL;
+        }
+
+        // The arriving side: ?ref= in the URL (from the landing page's "Open
+        // App" links) is kept for 30 days so it survives the email-confirmation
+        // round trip, then rides on the sign-up as referred_by. Stripped from
+        // the address bar like the other codes so it isn't shared onward.
+        function readRefFromUrl() {
+            try {
+                const url = new URL(location.href);
+                const raw = (url.searchParams.get('ref') || '').trim().toUpperCase();
+                if (!url.searchParams.has('ref')) return;
+                url.searchParams.delete('ref');
+                history.replaceState({}, '', url.pathname + url.search + url.hash);
+                if (REF_PATTERN.test(raw)) localStorage.setItem('ss_ref', JSON.stringify({ code: raw, at: Date.now() }));
+            } catch (err) {
+                console.warn('[SickleStrong] could not read share code', err);
+            }
+        }
+
+        function pendingRef() {
+            try {
+                const saved = JSON.parse(localStorage.getItem('ss_ref') || 'null');
+                if (saved && REF_PATTERN.test(saved.code) && Date.now() - saved.at < REF_DAYS * 864e5) return saved.code;
+            } catch (e) {}
+            return null;
+        }
+
+        // Added to sign-up metadata. Empty object when there's nothing to add,
+        // so the spread leaves the metadata exactly as it was.
+        function refMeta() {
+            const code = pendingRef();
+            return code ? { referred_by: code } : {};
+        }
+
+        let _myShareCode = null;
+        async function myShareCode() {
+            if (_myShareCode) return _myShareCode;
+            if (!(await _signedIn())) return null;
+            try {
+                const { data, error } = await sb.rpc('get_my_referral_code');
+                if (!error && typeof data === 'string' && REF_PATTERN.test(data)) _myShareCode = data;
+            } catch (e) {}
+            return _myShareCode; // null offline or before the database has it: share the plain link
+        }
+
+        function shareCountText(n) {
+            if (!n) return '';
+            return n === 1 ? '1 family joined through your link' : `${n} families joined through your link`;
+        }
+
+        async function refreshShareCount() {
+            const el = document.getElementById('shareAppCount');
+            if (!el || !(await _signedIn())) return null;
+            try {
+                const { data, error } = await sb.rpc('my_referral_count');
+                if (error || typeof data !== 'number') return null;
+                el.textContent = shareCountText(data);
+                el.style.display = data ? 'block' : 'none';
+                return data;
+            } catch (e) { return null; }
+        }
+
+        async function showShareApp() {
+            document.getElementById('ssShareApp')?.remove();
+            const code = await myShareCode();
+            const link = shareAppLinkFor(code);
+            const message = shareAppMessage(link);
+
+            const modal = document.createElement('div');
+            modal.className = 'modal active';
+            modal.id = 'ssShareApp';
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width:420px;">
+                    <button class="modal-close" aria-label="Close">×</button>
+                    <div class="modal-title">💜 Share SickleStrong</div>
+                    <p style="font-size:16px;color:var(--text-light);margin:0 0 12px;">
+                        For a family you know who could use it. They get the app's public page, not anything about your child, and nothing is shared from your account.
+                    </p>
+                    <button class="btn btn-primary" data-act="share" style="width:100%;margin-bottom:10px;">Send a message</button>
+                    <button class="btn btn-secondary" data-act="copy" style="width:100%;margin-bottom:16px;">Copy link</button>
+                    <div style="text-align:center;">
+                        <div style="font-size:16px;font-weight:600;margin-bottom:6px;">Or let them scan this</div>
+                        <div data-qr style="background:#fff;display:inline-block;padding:8px;border-radius:12px;width:220px;max-width:100%;"></div>
+                        <div style="font-size:14px;color:var(--text-light);margin-top:6px;">Point their phone's camera at the code.</div>
+                    </div>
+                    <div data-count style="font-size:16px;color:var(--primary);font-weight:600;text-align:center;margin-top:12px;"></div>
+                    <div style="font-size:14px;color:var(--text-light);text-align:center;margin-top:8px;">${code
+                        ? 'Your link counts sign-ups, never names.'
+                        : 'Sign in to see how many families join through your link.'}</div>
+                </div>`;
+            modal.querySelector('.modal-close').addEventListener('click', () => modal.remove());
+            modal.querySelector('[data-act="share"]').addEventListener('click', () => shareViaSheet('SickleStrong', message, 'Link'));
+            modal.querySelector('[data-act="copy"]').addEventListener('click', () => copyTextToClipboard(link, 'Link'));
+            modal.querySelector('[data-qr]').innerHTML = qrSvg(link);
+            document.body.appendChild(modal);
+
+            if (code) {
+                const n = await refreshShareCount();
+                if (modal.isConnected && n) modal.querySelector('[data-count]').textContent = shareCountText(n);
+            }
+        }
+
+        // ── QR code (byte mode, error correction M, versions 1–10) ─────────
+        // Written in, not loaded from a library: the app has no dependencies
+        // and must draw the code offline. Follows ISO/IEC 18004; the test
+        // suite decodes the output with an independent reader.
+        const QR_EC_PER_BLOCK = [0, 10, 16, 26, 18, 24, 16, 18, 22, 22, 26];
+        const QR_BLOCKS       = [0, 1, 1, 1, 2, 2, 4, 4, 4, 5, 5];
+        const QR_ALIGN = [[], [], [6, 18], [6, 22], [6, 26], [6, 30], [6, 34], [6, 22, 38], [6, 24, 42], [6, 26, 46], [6, 28, 50]];
+
+        function _qrRawModules(ver) {
+            let r = (16 * ver + 128) * ver + 64;
+            if (ver >= 2) { const n = Math.floor(ver / 7) + 2; r -= (25 * n - 10) * n - 55; if (ver >= 7) r -= 36; }
+            return r;
+        }
+        function _gfMul(x, y) {
+            let z = 0;
+            for (let i = 7; i >= 0; i--) { z = (z << 1) ^ ((z >>> 7) * 0x11D); z ^= ((y >>> i) & 1) * x; }
+            return z & 0xFF;
+        }
+        function _rsDivisor(degree) {
+            const res = new Array(degree).fill(0); res[degree - 1] = 1;
+            let root = 1;
+            for (let i = 0; i < degree; i++) {
+                for (let j = 0; j < degree; j++) { res[j] = _gfMul(res[j], root); if (j + 1 < degree) res[j] ^= res[j + 1]; }
+                root = _gfMul(root, 2);
+            }
+            return res;
+        }
+        function _rsRemainder(data, div) {
+            const res = new Array(div.length).fill(0);
+            for (const b of data) {
+                const f = b ^ res.shift(); res.push(0);
+                div.forEach((d, i) => { res[i] ^= _gfMul(d, f); });
+            }
+            return res;
+        }
+
+        function qrEncode(text) {
+            const bytes = Array.from(new TextEncoder().encode(text));
+            let ver = 1;
+            const dataCw = (v) => Math.floor(_qrRawModules(v) / 8) - QR_EC_PER_BLOCK[v] * QR_BLOCKS[v];
+            for (; ver <= 10; ver++) if (4 + (ver < 10 ? 8 : 16) + 8 * bytes.length <= dataCw(ver) * 8) break;
+            if (ver > 10) throw new Error('QR_TOO_LONG');
+
+            // Data bits: mode, length, bytes, terminator, then pad codewords.
+            const bits = [];
+            const put = (val, len) => { for (let i = len - 1; i >= 0; i--) bits.push((val >>> i) & 1); };
+            put(4, 4); put(bytes.length, ver < 10 ? 8 : 16); bytes.forEach((b) => put(b, 8));
+            const cap = dataCw(ver) * 8;
+            put(0, Math.min(4, cap - bits.length));
+            put(0, (8 - bits.length % 8) % 8);
+            for (let p = 0xEC; bits.length < cap; p ^= 0xEC ^ 0x11) put(p, 8);
+            const data = [];
+            for (let i = 0; i < bits.length; i += 8) data.push(parseInt(bits.slice(i, i + 8).join(''), 2));
+
+            // Split into blocks, add error correction, interleave.
+            const nb = QR_BLOCKS[ver], ecLen = QR_EC_PER_BLOCK[ver];
+            const raw = Math.floor(_qrRawModules(ver) / 8);
+            const shortLen = Math.floor(raw / nb);
+            const numShort = nb - raw % nb;
+            const div = _rsDivisor(ecLen);
+            const blocks = [];
+            for (let i = 0, k = 0; i < nb; i++) {
+                const len = shortLen - ecLen + (i < numShort ? 0 : 1);
+                const d = data.slice(k, k + len); k += len;
+                blocks.push({ d, e: _rsRemainder(d, div) });
+            }
+            const cw = [];
+            for (let i = 0; i <= shortLen - ecLen; i++) blocks.forEach((b) => { if (i < b.d.length) cw.push(b.d[i]); });
+            for (let i = 0; i < ecLen; i++) blocks.forEach((b) => cw.push(b.e[i]));
+
+            const size = ver * 4 + 17;
+            const m = Array.from({ length: size }, () => new Array(size).fill(false));
+            const fn = Array.from({ length: size }, () => new Array(size).fill(false));
+            const set = (x, y, dark) => { m[y][x] = dark; fn[y][x] = true; };
+
+            for (let i = 0; i < size; i++) { set(6, i, i % 2 === 0); set(i, 6, i % 2 === 0); }
+            const finder = (cx, cy) => {
+                for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) {
+                    const x = cx + dx, y = cy + dy;
+                    if (x < 0 || y < 0 || x >= size || y >= size) continue;
+                    const d = Math.max(Math.abs(dx), Math.abs(dy));
+                    set(x, y, d !== 2 && d !== 4);
+                }
+            };
+            finder(3, 3); finder(size - 4, 3); finder(3, size - 4);
+            const al = QR_ALIGN[ver];
+            al.forEach((ay, i) => al.forEach((ax, j) => {
+                if ((i === 0 && j === 0) || (i === 0 && j === al.length - 1) || (i === al.length - 1 && j === 0)) return;
+                for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++)
+                    set(ax + dx, ay + dy, Math.max(Math.abs(dx), Math.abs(dy)) !== 1);
+            }));
+            const drawFormat = (mask) => {
+                const d = (0 << 3) | mask; // error correction M = 00
+                let r = d;
+                for (let i = 0; i < 10; i++) r = (r << 1) ^ ((r >>> 9) * 0x537);
+                const f = ((d << 10) | r) ^ 0x5412;
+                const b = (i) => ((f >>> i) & 1) === 1;
+                for (let i = 0; i <= 5; i++) set(8, i, b(i));
+                set(8, 7, b(6)); set(8, 8, b(7)); set(7, 8, b(8));
+                for (let i = 9; i < 15; i++) set(14 - i, 8, b(i));
+                for (let i = 0; i < 8; i++) set(size - 1 - i, 8, b(i));
+                for (let i = 8; i < 15; i++) set(8, size - 15 + i, b(i));
+                set(8, size - 8, true);
+            };
+            drawFormat(0); // reserve the area before placing data
+            if (ver >= 7) {
+                let r = ver;
+                for (let i = 0; i < 12; i++) r = (r << 1) ^ ((r >>> 11) * 0x1F25);
+                const v = (ver << 12) | r;
+                for (let i = 0; i < 18; i++) {
+                    const dark = ((v >>> i) & 1) === 1, a = size - 11 + i % 3, b = Math.floor(i / 3);
+                    set(a, b, dark); set(b, a, dark);
+                }
+            }
+
+            // Zigzag the codewords into the free modules.
+            let i = 0;
+            for (let right = size - 1; right >= 1; right -= 2) {
+                if (right === 6) right = 5;
+                for (let vert = 0; vert < size; vert++) for (let j = 0; j < 2; j++) {
+                    const x = right - j, up = ((right + 1) & 2) === 0, y = up ? size - 1 - vert : vert;
+                    if (!fn[y][x] && i < cw.length * 8) { m[y][x] = ((cw[i >>> 3] >>> (7 - (i & 7))) & 1) === 1; i++; }
+                }
+            }
+
+            const maskFn = [
+                (x, y) => (x + y) % 2 === 0, (x, y) => y % 2 === 0, (x) => x % 3 === 0, (x, y) => (x + y) % 3 === 0,
+                (x, y) => (Math.floor(x / 3) + Math.floor(y / 2)) % 2 === 0, (x, y) => (x * y) % 2 + (x * y) % 3 === 0,
+                (x, y) => ((x * y) % 2 + (x * y) % 3) % 2 === 0, (x, y) => ((x + y) % 2 + (x * y) % 3) % 2 === 0,
+            ];
+            const applyMask = (k) => {
+                for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) if (!fn[y][x] && maskFn[k](x, y)) m[y][x] = !m[y][x];
+            };
+            // Pick the mask that scores best on the standard's penalty rules,
+            // which is what keeps the code easy for cameras to read.
+            const penalty = () => {
+                let p = 0, dark = 0;
+                const line = (get) => {
+                    for (let a = 0; a < size; a++) {
+                        let run = 1;
+                        for (let b = 1; b <= size; b++) {
+                            if (b < size && get(a, b) === get(a, b - 1)) run++;
+                            else { if (run >= 5) p += run - 2; run = 1; }
+                        }
+                        for (let b = 0; b + 11 <= size; b++) {
+                            const s = Array.from({ length: 11 }, (_, k) => get(a, b + k) ? 1 : 0).join('');
+                            if (s === '10111010000' || s === '00001011101') p += 40;
+                        }
+                    }
+                };
+                line((a, b) => m[a][b]); line((a, b) => m[b][a]);
+                for (let y = 0; y < size - 1; y++) for (let x = 0; x < size - 1; x++) {
+                    const c = m[y][x];
+                    if (c === m[y][x + 1] && c === m[y + 1][x] && c === m[y + 1][x + 1]) p += 3;
+                }
+                m.forEach((row) => row.forEach((c) => { if (c) dark++; }));
+                p += Math.floor(Math.abs(dark * 20 - size * size * 10) / (size * size)) * 10;
+                return p;
+            };
+            let best = 0, bestP = Infinity;
+            for (let k = 0; k < 8; k++) {
+                applyMask(k); drawFormat(k);
+                const p = penalty();
+                if (p < bestP) { bestP = p; best = k; }
+                applyMask(k);
+            }
+            applyMask(best); drawFormat(best);
+            return { size, modules: m };
+        }
+
+        function qrSvg(text) {
+            const { size, modules } = qrEncode(text);
+            const q = 4, n = size + q * 2;
+            let d = '';
+            modules.forEach((row, y) => row.forEach((dark, x) => { if (dark) d += `M${x + q} ${y + q}h1v1h-1z`; }));
+            return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${n} ${n}" width="100%" role="img" aria-label="QR code" shape-rendering="crispEdges">`
+                + `<rect width="${n}" height="${n}" fill="#fff"/><path d="${d}" fill="#000"/></svg>`;
+        }
+
         function inviteLinkFor(code) {
             return `${APP_URL}?invite=${encodeURIComponent(code)}`;
         }
@@ -9258,6 +9576,9 @@
             const meta = teen
                 ? { full_name: name, role: 'teen', age_band: '13-17', parent_email: parentEmail }
                 : { full_name: name, role, age_band: '18+' };
+            // Who shared the app with them, if anyone: a count for the sharer,
+            // never access to anything.
+            Object.assign(meta, refMeta());
             const { data, error } = await sb.auth.signUp({
                 email, password,
                 options: { data: meta, emailRedirectTo: APP_URL }
@@ -9883,7 +10204,7 @@
             const { data, error } = await sb.auth.signUp({
                 email, password,
                 options: { data: { full_name: name, role: 'caregiver', pending_invite_code: code,
-                                   age_band: age === 'teen' ? '13-17' : '18+' }, emailRedirectTo: APP_URL }
+                                   age_band: age === 'teen' ? '13-17' : '18+', ...refMeta() }, emailRedirectTo: APP_URL }
             });
             if (error) return showError(passwordErrorReason(error) || error.message);
 
@@ -11222,6 +11543,7 @@
                 console.warn('[SickleStrong] password recovery failed', err);
             }
 
+            readRefFromUrl();
             const pendingInvite = readInviteFromUrl();
             const approveFromUrl = readApproveFromUrl();
             if (approveFromUrl) savePendingApproval(approveFromUrl);

@@ -46,7 +46,10 @@ node tests/teen-approval.test.mjs            # 22 checks — teen self sign-up, 
 node tests/quiet-messages.test.mjs           # 26 checks — no alert()/confirm()/prompt(); 14px+ text at 360px
 node tests/cloud-edits.test.mjs              # 8 checks — synced records' buttons work; edits/deletes reach the cloud
 node tests/push-reminders.test.mjs           # 40 checks — Web Push encryption, reminder schedule, enable/disable
+node tests/share-app.test.mjs                # 20 checks — share with another family: no child named, share code, QR decodes
 ```
+
+`share-app` also needs `npm i --no-save jsqr pngjs` (an independent QR reader).
 
 Tests are plain `.mjs` scripts run directly by Node — there is no test runner,
 so there is no "run a single test" flag. Each file is one suite; run the file.
@@ -112,7 +115,8 @@ Other `localStorage` keys: `ss_auth` (session mirror), `ss_auth_dismissed`
 (suppresses the account prompt), `ss_install_dismissed`, `ss_outbox` (log
 entries waiting to upload — see above), `ss_pending_invite` (an invite code
 kept through a password reset, redeemed on the next signed-in open, 14-day
-limit), `ss_unsynced` (set when a non-queued
+limit), `ss_ref` (a share code from a `?ref=` link, sent as
+`referred_by` on sign-up, 30-day limit), `ss_unsynced` (set when a non-queued
 write fails or runs offline, or the cloud permanently rejects a queued one;
 sign-out warns before erasing either), and `ss_accounts` — a **read-only
 legacy** pre-Supabase account store; nothing writes it.
@@ -196,11 +200,24 @@ a teen account creating child profiles, so the waiting screen is a guide, not
 the lock. The privacy policy (landing repo, section 2) states these rules, so
 change both together.
 
+**Sharing the app is not sharing access.** The Home card "Know a family
+facing sickle cell?" (`showShareApp()`) sends a link to the public landing
+page (`LANDING_URL?ref=CODE#join`), never to the app, and its message names no
+child. A signed-in sharer's link carries their share code (`FAM-XXXXXX`, from
+`get_my_referral_code`); a new account that arrived through it records
+`referred_by`, and `my_referral_count` returns a count only — never who.
+Partner codes (`NURSE-LEXI`) are rows in `referral_codes` with a label and no
+account, printed on cards. The landing page keeps `?ref` for 30 days, adds it
+to its "Open App" links, and tags beta sign-ups `[ref:CODE]`. The QR code is
+drawn by the app's own encoder (`qrEncode`, byte mode, level M, versions
+1–10) so it works offline with no dependency.
+
 **Database work is out of band.** The RPCs the frontend calls
 (`provision_current_user`, `redeem_child_invite`, `generate_child_invite`,
 `lookup_family_by_code`, `switch_household`, `set_child_active_status`,
 `delete_child_permanently`, `cancel_child_invite`, `delete_my_account`,
-`save_push_subscription`, `remove_push_subscription`) and all RLS policies live in
+`save_push_subscription`, `remove_push_subscription`, `get_my_referral_code`,
+`my_referral_count`) and all RLS policies live in
 Supabase. There are **no migrations in git**. Do not attempt schema changes;
 assume the live database already provides them.
 
