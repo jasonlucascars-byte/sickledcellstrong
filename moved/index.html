@@ -57,6 +57,9 @@
 <script>
 (function () {
   var APP_URL = 'https://sicklestrong-v2.netlify.app/';
+  // The app's own site also serves this file (it lives in the app repo). There
+  // it has nothing to rescue: the records are already at the right address.
+  if (location.origin + '/' === APP_URL) { location.replace(APP_URL); return; }
   // Chrome takes links of a few MB; Safari has run into trouble well below
   // that. Above this the photos are left out of the link (they can still be
   // saved with "Save a copy").
