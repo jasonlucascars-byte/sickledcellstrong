@@ -47,6 +47,8 @@ node tests/quiet-messages.test.mjs           # 26 checks — no alert()/confirm(
 node tests/cloud-edits.test.mjs              # 8 checks — synced records' buttons work; edits/deletes reach the cloud
 node tests/push-reminders.test.mjs           # 40 checks — Web Push encryption, reminder schedule, enable/disable
 node tests/share-app.test.mjs                # 20 checks — share with another family: no child named, share code, QR decodes
+node tests/moved-rescue.test.mjs             # 21 checks — old addresses' records come over (#rescue=), ask first, merge only adds
+node tests/yellow-eyes.test.mjs              # 6 checks — body map → Log Symptoms with Jaundice ticked
 ```
 
 `share-app` also needs `npm i --no-save jsqr pngjs` (an independent QR reader).
@@ -199,6 +201,19 @@ email the teen named, picks the profile (`approve_teen_request` inserts the
 a teen account creating child profiles, so the waiting screen is a guide, not
 the lock. The privacy policy (landing repo, section 2) states these rules, so
 change both together.
+
+**Old addresses.** Early beta links pointed at sickledcellstrong-test.netlify.app
+and sicklestrong.netlify.app; those versions kept records only in that
+address's browser storage (same `sickleStrongData` shape). Both sites now serve
+`moved/index.html`, which packs the phone's records into
+`APP_URL#rescue=g.<gzip base64url>` (photos dropped if the link would pass
+~1.5 MB, `photosLeft` set). `handleRescueFromUrl()` runs right after
+`loadData()` at boot, clears the fragment, shows what's inside and asks before
+`mergeRescuedData()` adds anything — the link can be crafted by anyone, and
+merging only ever adds (matched by id, or name/moment, never overwriting). The
+old landing (sicklestrong-landing.netlify.app) deploys `moved-landing/`, a 301
+to the current landing. These folders are deployed by hand (Netlify drop), not
+from `main`.
 
 **Sharing the app is not sharing access.** The Home card "Know a family
 facing sickle cell?" (`showShareApp()`) sends a link to the public landing

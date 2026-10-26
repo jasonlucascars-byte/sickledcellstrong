@@ -2944,6 +2944,19 @@
                     ${window.selectedPainLocations.length > 0 ? `
                         <button class="btn btn-primary btn-full" style="margin-top: 16px;" onclick="proceedToPainLevel()">Continue →</button>
                     ` : ''}
+
+                    <!-- Parents look for yellow eyes here, on the head. It isn't
+                         pain, so it's logged as a symptom (Jaundice) rather than
+                         a pain location, where it would distort pain reports. -->
+                    <div id="yellowEyesPrompt" style="margin-top:16px;padding:12px 14px;background:#FFF8E1;border:1.5px solid #F5C518;border-radius:12px;">
+                        <div style="font-size:16px;font-weight:700;margin-bottom:4px;">👁️ Eyes or skin look yellow?</div>
+                        ${canDo('full') ? `
+                            <div style="font-size:16px;color:var(--text-light);margin-bottom:10px;">That isn't pain, so it's saved as a symptom, with a photo if you like.</div>
+                            <button class="btn btn-secondary btn-full" id="yellowEyesBtn" onclick="logYellowEyesFromMap()">Log yellow eyes or skin</button>
+                        ` : `
+                            <div style="font-size:16px;color:var(--text-light);">Tell ${escapeHtml(child.name)}'s parent right away.</div>
+                        `}
+                    </div>
                     
                     <style>
                         .body-part {
@@ -2965,6 +2978,13 @@
             document.body.appendChild(modal);
         }
         
+        // From the pain body map: close it (keeping no half-picked pain
+        // locations) and open Log Symptoms with Jaundice already ticked.
+        function logYellowEyesFromMap() {
+            closePainMapAndClear();
+            showLogSymptoms('jaundice');
+        }
+
         function getFrontBodySVG() {
             return `
                 <svg viewBox="0 0 200 400" style="width: 100%; max-width: 250px; margin: 0 auto; display: block; cursor: pointer;">
@@ -3645,7 +3665,7 @@
             container.innerHTML = html;
         }
         
-        function showLogSymptoms() {
+        function showLogSymptoms(preselect) {
             if (!requirePermission('full')) return;
             const child = getCurrentChild();
             if (!child) return;
@@ -3834,6 +3854,10 @@
                 </div>
             `;
             document.body.appendChild(modal);
+            if (preselect) {
+                const box = document.getElementById('sym_' + preselect);
+                if (box) { box.checked = true; highlightSymptomLabel(preselect, true); }
+            }
         }
 
         function highlightSymptomLabel(id, checked) {
@@ -8586,6 +8610,149 @@
         // A tappable link, so an invite can go out as a text message and the
         // recipient never has to type a code by hand. Always built from
         // APP_URL — see the note there for why location.origin was wrong.
+        // ── Records from an old SickleStrong address ───────────────────────
+        // Early beta families were sent to older addresses
+        // (sickledcellstrong-test.netlify.app, sicklestrong.netlify.app). Those
+        // versions kept everything in that address's browser storage only, and
+        // a browser never lets one address read another's storage. So the old
+        // addresses now serve a "moved" page (moved/index.html) that packs the
+        // phone's records into this link's #rescue= fragment. A fragment never
+        // leaves the phone (it isn't sent to any server), and it's cleared from
+        // the address bar as soon as it's read.
+        //
+        // Anyone can build such a link, so nothing is added without the parent
+        // seeing what's in it and saying yes. Merging only ever adds: nothing
+        // already in the app is changed or removed. Once added, a signed-in
+        // phone's next sync uploads the new entries like any other never-
+        // uploaded entries (mergeLocalIntoCloud).
+        const RESCUE_PREFIX = '#rescue=';
+        const RESCUE_LISTS = ['painLog', 'temperatureLog', 'symptoms', 'weightHistory', 'notes', 'medications'];
+
+        async function _rescueDecode(payload) {
+            // "g." = gzip then base64url; "j." = plain base64url (old browsers
+            // without CompressionStream).
+            const kind = payload.slice(0, 2), b64 = payload.slice(2).replace(/-/g, '+').replace(/_/g, '/');
+            const bin = atob(b64 + '='.repeat((4 - b64.length % 4) % 4));
+            const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+            let text;
+            if (kind === 'g.') {
+                const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+                text = await new Response(stream).text();
+            } else if (kind === 'j.') {
+                text = new TextDecoder().decode(bytes);
+            } else throw new Error('RESCUE_FORMAT');
+            const data = JSON.parse(text);
+            if (!data || typeof data !== 'object' || !Array.isArray(data.children)) throw new Error('RESCUE_SHAPE');
+            data.children = data.children.filter((c) => c && typeof c === 'object' && typeof c.name === 'string');
+            data.contacts = Array.isArray(data.contacts) ? data.contacts.filter((c) => c && typeof c === 'object') : [];
+            return data;
+        }
+
+        function _rescueEntryCount(child) {
+            return RESCUE_LISTS.reduce((n, list) => n + (Array.isArray(child[list]) ? child[list].length : 0), 0);
+        }
+
+        function _rescueAt(e) {
+            return e.startTime || e.timestamp || e.date || null;
+        }
+
+        // Adds what the phone doesn't already have. Returns how many children
+        // and entries were added.
+        function mergeRescuedData(incoming) {
+            const added = { children: 0, entries: 0, contacts: 0 };
+            const norm = (v) => String(v || '').trim().toLowerCase();
+            const digits = (v) => String(v || '').replace(/\D/g, '');
+            if (!Array.isArray(appData.children)) appData.children = [];
+            if (!Array.isArray(appData.contacts)) appData.contacts = [];
+
+            for (const child of incoming.children) {
+                const here = appData.children.find((c) => String(c.id) === String(child.id) && norm(c.name) === norm(child.name))
+                          || appData.children.find((c) => norm(c.name) === norm(child.name));
+                if (!here) {
+                    const copy = { ...child };
+                    if (appData.children.some((c) => String(c.id) === String(copy.id))) copy.id = Date.now().toString() + appData.children.length;
+                    RESCUE_LISTS.forEach((list) => { if (!Array.isArray(copy[list])) copy[list] = []; });
+                    appData.children.push(copy);
+                    added.children++;
+                    added.entries += _rescueEntryCount(copy);
+                    continue;
+                }
+                for (const list of RESCUE_LISTS) {
+                    const from = Array.isArray(child[list]) ? child[list] : [];
+                    if (!Array.isArray(here[list])) here[list] = [];
+                    for (const e of from) {
+                        if (!e || typeof e !== 'object') continue;
+                        const dup = here[list].some((h) =>
+                            String(h.id) === String(e.id)
+                            || (list === 'medications' ? norm(h.name) === norm(e.name)
+                                                       : (_rescueAt(e) && _sameMoment(_rescueAt(h), _rescueAt(e)))));
+                        if (dup) continue;
+                        here[list].push(e);
+                        added.entries++;
+                    }
+                }
+            }
+            for (const c of incoming.contacts) {
+                const dup = appData.contacts.some((h) => norm(h.name) === norm(c.name) && digits(h.phone) === digits(c.phone));
+                if (dup) continue;
+                appData.contacts.push(c);
+                added.contacts++;
+            }
+            // Parent names and phone numbers fill blanks only.
+            if (incoming.parents && typeof incoming.parents === 'object') {
+                appData.parents = appData.parents || {};
+                for (const k of ['parent1', 'parent2']) {
+                    const from = incoming.parents[k] || {}, to = (appData.parents[k] = appData.parents[k] || {});
+                    for (const f of ['name', 'phone', 'email']) if (!to[f] && typeof from[f] === 'string') to[f] = from[f];
+                }
+            }
+            if (appData.children.length) {
+                appData.setupComplete = true;
+                if (!appData.children.some((c) => String(c.id) === String(appData.currentChildId))) appData.currentChildId = appData.children[0].id;
+            }
+            return added;
+        }
+
+        async function handleRescueFromUrl() {
+            if (!location.hash.startsWith(RESCUE_PREFIX)) return;
+            const payload = location.hash.slice(RESCUE_PREFIX.length);
+            try { history.replaceState({}, '', location.pathname + location.search); } catch (e) {}
+            let incoming;
+            try {
+                incoming = await _rescueDecode(payload);
+            } catch (err) {
+                console.warn('[SickleStrong] could not read rescued records', err);
+                notify("We couldn't read the records from the old SickleStrong address. Nothing was changed. "
+                    + 'Open the old address again and tap "Bring my records" once more.');
+                return;
+            }
+            const names = incoming.children.map((c) => c.name).filter(Boolean);
+            const entries = incoming.children.reduce((n, c) => n + _rescueEntryCount(c), 0);
+            if (!names.length && !incoming.contacts.length) {
+                notify('There were no records to bring over from the old address.');
+                return;
+            }
+            const what = [
+                names.length ? `${names.length === 1 ? 'Profile' : 'Profiles'}: ${names.join(', ')}` : '',
+                `${entries} ${entries === 1 ? 'entry' : 'entries'} (pain, temperature, symptoms, medicines, notes, weight)`,
+                incoming.contacts.length ? `${incoming.contacts.length} care ${incoming.contacts.length === 1 ? 'contact' : 'contacts'}` : '',
+            ].filter(Boolean).join('\n');
+            const ok = await askConfirm(
+                'Bring these records from your old SickleStrong address into the app?\n\n' + what
+                + '\n\nOnly add records you recognize. Anything already here stays as it is.',
+                { okLabel: 'Bring them over', cancelLabel: 'Not now' });
+            if (!ok) return;
+            const added = mergeRescuedData(incoming);
+            saveData();
+            const parts = [];
+            if (added.children) parts.push(`${added.children} ${added.children === 1 ? 'profile' : 'profiles'}`);
+            if (added.entries) parts.push(`${added.entries} ${added.entries === 1 ? 'entry' : 'entries'}`);
+            if (added.contacts) parts.push(`${added.contacts} ${added.contacts === 1 ? 'contact' : 'contacts'}`);
+            const photos = incoming.photosLeft ? ' Photos were too big to move and are still at the old address.' : '';
+            notify((parts.length ? `Brought over ${parts.join(', ')}. Welcome to the new address!`
+                                 : 'Everything from the old address was already here.') + photos);
+        }
+
         // ── Share SickleStrong with another family ─────────────────────────
         // A parent who knows a family that needs the app (or a school nurse
         // who knows several) passes it on. This is deliberately NOT an invite:
@@ -11524,6 +11691,10 @@
 
         document.addEventListener('DOMContentLoaded', async () => {
             loadData();
+            // Records carried over from an old SickleStrong address (#rescue=).
+            // Before anything decides between the setup wizard and the app: a
+            // fresh phone that accepts them goes straight to the app.
+            try { await handleRescueFromUrl(); } catch (err) { console.warn('[SickleStrong] rescue failed', err); }
             registerServiceWorker();
             updateOnlineStatus();
 

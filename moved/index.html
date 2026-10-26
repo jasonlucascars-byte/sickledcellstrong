@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>SickleStrong has moved</title>
+<!--
+  Served at the OLD app addresses (sickledcellstrong-test.netlify.app,
+  sicklestrong.netlify.app) in place of the old app. Those versions saved
+  records only in that address's browser storage ('sickleStrongData'), which
+  the new address can't read. This page can: it packs the records into the
+  new app's #rescue= link (gzip + base64url; a fragment never leaves the
+  phone), and the new app asks before adding anything. Nothing here is
+  deleted, so the records stay safe at this address too.
+  Deploy: this folder as the whole site. Test: tests/moved-rescue.test.mjs.
+-->
+<style>
+  :root { --primary:#0ea89a; --primary-dark:#0a7a70; --text:#1d2433; --light:#5b6475; --bg:#f4f7f9; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; }
+  main { max-width:460px; margin:0 auto; padding:32px 16px; }
+  .card { background:#fff; border-radius:18px; padding:24px 20px; box-shadow:0 4px 20px rgba(0,0,0,.06); }
+  h1 { font-size:24px; margin:0 0 8px; }
+  p { margin:0 0 14px; }
+  .muted { color:var(--light); }
+  .found { background:#e8faf9; border-radius:12px; padding:12px 14px; margin:0 0 16px; }
+  .found b { display:block; margin-bottom:2px; }
+  button, a.btn { display:block; width:100%; text-align:center; padding:15px; border-radius:14px; font-weight:700; font-size:17px; line-height:1.2; font-family:inherit; border:0; cursor:pointer; text-decoration:none; margin-bottom:10px; }
+  a.btn.secondary, button.secondary { border:1.5px solid #dde3ea; }
+  .primary { background:linear-gradient(135deg,var(--primary),var(--primary-dark)); color:#fff; }
+  .secondary { background:#fff; color:var(--text); border:1.5px solid #dde3ea; }
+  .small { font-size:14px; }
+  ol { padding-left:20px; margin:8px 0 0; }
+</style>
+</head>
+<body>
+<main>
+  <div class="card">
+    <div style="font-size:40px;line-height:1;margin-bottom:10px;">💜</div>
+    <h1>SickleStrong has a new address</h1>
+    <p class="muted">This old address isn't updated anymore. The new SickleStrong has everything here and more: reminders, sharing with family, and reports for doctors and school.</p>
+
+    <div id="found" class="found" hidden>
+      <b>We found your records on this phone</b>
+      <span id="foundText"></span>
+    </div>
+
+    <button id="bring" class="primary" hidden>Bring my records to the new app</button>
+    <a id="open" class="btn primary" href="https://sicklestrong-v2.netlify.app/">Open the new SickleStrong</a>
+    <button id="download" class="secondary" hidden>Save a copy of my records</button>
+    <p id="note" class="small muted" hidden></p>
+
+    <p class="small muted" style="margin-top:16px;">If you added SickleStrong to your Home Screen, remove that icon and add it again from the new app, so it opens the new address.</p>
+  </div>
+</main>
+<script>
+(function () {
+  var APP_URL = 'https://sicklestrong-v2.netlify.app/';
+  // Chrome takes links of a few MB; Safari has run into trouble well below
+  // that. Above this the photos are left out of the link (they can still be
+  // saved with "Save a copy").
+  var MAX_LINK = 1500000;
+  var LISTS = ['painLog', 'temperatureLog', 'symptoms', 'weightHistory', 'notes', 'medications'];
+
+  var raw = null, data = null;
+  try { raw = localStorage.getItem('sickleStrongData'); data = raw ? JSON.parse(raw) : null; } catch (e) { data = null; }
+  var children = data && Array.isArray(data.children) ? data.children.filter(function (c) { return c && c.name; }) : [];
+  var contacts = data && Array.isArray(data.contacts) ? data.contacts : [];
+  if (!children.length && !contacts.length) return; // nothing here: just the "open" button
+
+  var entries = 0;
+  children.forEach(function (c) { LISTS.forEach(function (l) { if (Array.isArray(c[l])) entries += c[l].length; }); });
+  var parts = [];
+  if (children.length) parts.push(children.map(function (c) { return c.name; }).join(', '));
+  parts.push(entries + (entries === 1 ? ' entry' : ' entries'));
+  if (contacts.length) parts.push(contacts.length + (contacts.length === 1 ? ' care contact' : ' care contacts'));
+  document.getElementById('foundText').textContent = parts.join(' · '); // textContent: names are the family's own text
+  document.getElementById('found').hidden = false;
+  document.getElementById('bring').hidden = false;
+  document.getElementById('download').hidden = false;
+  var open = document.getElementById('open');
+  open.className = 'btn secondary';
+  open.textContent = 'Open the new app without my records';
+
+  function b64url(bytes) {
+    var s = '', CH = 0x8000;
+    for (var i = 0; i < bytes.length; i += CH) s += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+    return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+  function pack(obj) {
+    var bytes = new TextEncoder().encode(JSON.stringify(obj));
+    if (typeof CompressionStream !== 'function') return Promise.resolve('j.' + b64url(bytes));
+    var stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream('gzip'));
+    return new Response(stream).arrayBuffer().then(function (buf) { return 'g.' + b64url(new Uint8Array(buf)); });
+  }
+  function withoutPhotos(obj) {
+    return JSON.parse(JSON.stringify(obj, function (k, v) { return k === 'photo' ? undefined : v; }));
+  }
+
+  document.getElementById('bring').addEventListener('click', function () {
+    var btn = this; btn.disabled = true; btn.textContent = 'Getting your records ready…';
+    var payload = { children: children, contacts: contacts, parents: data.parents || null };
+    pack(payload).then(function (p) {
+      if (p.length > MAX_LINK) {
+        var note = document.getElementById('note');
+        note.textContent = 'Your photos are too big to move this way, so they stay here. Tap "Save a copy" to keep them.';
+        note.hidden = false;
+        var lighter = withoutPhotos(payload);
+        lighter.photosLeft = true; // the app says so after bringing the rest over
+        return pack(lighter);
+      }
+      return p;
+    }).then(function (p) {
+      location.href = APP_URL + '#rescue=' + p;
+    }).catch(function () {
+      btn.disabled = false; btn.textContent = 'Bring my records to the new app';
+      var note = document.getElementById('note');
+      note.textContent = 'Something went wrong. Your records are still safe here. Tap "Save a copy of my records" to keep a copy, then try again.';
+      note.hidden = false;
+    });
+  });
+
+  document.getElementById('download').addEventListener('click', function () {
+    var blob = new Blob([raw], { type: 'application/json' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'SickleStrong-records-' + new Date().toLocaleDateString('en-CA') + '.json';
+    document.body.appendChild(a); a.click(); a.remove();
+  });
+})();
+</script>
+</body>
+</html>
