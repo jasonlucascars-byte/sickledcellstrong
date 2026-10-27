@@ -719,6 +719,7 @@
         }
 
         /* Modal */
+        .modal.over-lock { z-index: 6500; }
         .modal {
             display: none;
             position: fixed;
@@ -1963,11 +1964,11 @@
                 <div id="loginForm">
                     <div class="input-group">
                         <label class="input-label">Email Address</label>
-                        <input type="email" class="input-field" id="loginEmail" placeholder="your@email.com" />
+                        <input type="email" class="input-field" id="loginEmail" name="email" autocomplete="username" autocapitalize="off" placeholder="your@email.com" />
                     </div>
                     <div class="input-group">
                         <label class="input-label">Password</label>
-                        <input type="password" class="input-field" id="loginPassword" placeholder="Your password" />
+                        <input type="password" class="input-field" id="loginPassword" name="password" autocomplete="current-password" placeholder="Your password" />
                     </div>
                     <button class="btn btn-primary btn-full" style="margin-top:8px;" onclick="handleLogin()">
                         Sign In 💙
@@ -1993,15 +1994,15 @@
                 <div id="signupForm" style="display:none;">
                     <div class="input-group">
                         <label class="input-label">Your Name</label>
-                        <input type="text" class="input-field" id="signupName" placeholder="Full name" />
+                        <input type="text" class="input-field" id="signupName" name="name" autocomplete="name" placeholder="Full name" />
                     </div>
                     <div class="input-group">
                         <label class="input-label">Email Address</label>
-                        <input type="email" class="input-field" id="signupEmail" placeholder="your@email.com" />
+                        <input type="email" class="input-field" id="signupEmail" name="email" autocomplete="username" autocapitalize="off" placeholder="your@email.com" />
                     </div>
                     <div class="input-group">
                         <label class="input-label">Password</label>
-                        <input type="password" class="input-field" id="signupPassword" placeholder="8+ characters, a capital and a number" />
+                        <input type="password" class="input-field" id="signupPassword" name="new-password" autocomplete="new-password" placeholder="8+ characters, a capital and a number" />
                     </div>
                     <div class="input-group">
                         <label class="input-label">Your age</label>
@@ -6905,6 +6906,9 @@
                     <!-- Filled in after the session check: only shown when signed in. -->
                     <div id="settingsAccountRow"></div>
 
+                    <!-- App lock: filled in after the session / device checks. -->
+                    <div id="settingsLockRow"></div>
+
                     <div style="border-top: 1px solid var(--border); padding-top: 16px; margin-top: 16px;">
                         <button class="btn btn-secondary btn-full" style="margin-bottom: 10px;" onclick="exportAllData()">📥 Export All Data</button>
                         <button class="btn btn-full" style="background: var(--emergency);" onclick="clearAllData()">🗑️ Clear All Data</button>
@@ -6918,6 +6922,7 @@
             `;
             document.body.appendChild(modal);
             renderSettingsAccountRow(modal);
+            renderSettingsLockRow(modal);
         }
 
         // Settings is built synchronously; the session check isn't, so the
@@ -8610,6 +8615,229 @@
         // A tappable link, so an invite can go out as a text message and the
         // recipient never has to type a code by hand. Always built from
         // APP_URL — see the note there for why location.origin was wrong.
+        // ── App lock (Face ID / fingerprint) ──────────────────────────────
+        // An opt-in screen lock for THIS phone, for the shared or borrowed
+        // phone that opens straight into a child's health records. It uses the
+        // phone's own biometric prompt through WebAuthn (a platform
+        // authenticator with userVerification required, so the phone falls
+        // back to its passcode when Face ID or a fingerprint fails; no one is
+        // locked out by a cut finger).
+        //
+        // What this is not: encryption. It keeps other people out of the app;
+        // the records stay in the browser's storage as before, and nothing
+        // here is checked by a server (there is no server to ask when the app
+        // is offline). The authenticator data's user-verified flag is checked
+        // so a presence-only tap can't unlock it.
+        //
+        // Needs a signed-in account on purpose: the way out of a lock that
+        // can't be opened (biometrics reset, credential deleted) is to sign
+        // out, which erases the phone's copy and needs the password to come
+        // back. With no account that escape would be "lose everything", and a
+        // lock with a bypass isn't a lock. Sign-out removes the lock.
+        const LOCK_KEY = 'ss_lock';
+        const LOCK_AFTER_MS = 60 * 1000;   // back from another app within a minute: no re-prompt
+        let _lockShown = false, _lockBusy = false, _lockHiddenAt = 0;
+
+        function _b64u(bytes) {
+            let s = ''; bytes.forEach((b) => { s += String.fromCharCode(b); });
+            return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        }
+        function _unb64u(str) {
+            const b64 = str.replace(/-/g, '+').replace(/_/g, '/');
+            const bin = atob(b64 + '='.repeat((4 - b64.length % 4) % 4));
+            return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+        }
+        function lockRecord() {
+            try {
+                const v = JSON.parse(localStorage.getItem(LOCK_KEY) || 'null');
+                return v && typeof v.id === 'string' && v.id ? v : null;
+            } catch (e) { return null; }
+        }
+        async function lockAvailable() {
+            try {
+                return !!(window.isSecureContext && window.PublicKeyCredential
+                    && PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable
+                    && await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable());
+            } catch (e) { return false; }
+        }
+        // authenticatorData: 32-byte RP id hash, then a flags byte; bit 2 (0x04)
+        // is "user verified" (the biometric or passcode actually happened).
+        function _userVerified(cred) {
+            try {
+                const d = new Uint8Array(cred.response.authenticatorData);
+                return d.length > 32 && (d[32] & 0x04) !== 0;
+            } catch (e) { return false; }
+        }
+
+        async function enableAppLock() {
+            if (!(await _signedIn())) { notify('Sign in to your account first. App lock needs one.'); return false; }
+            if (!(await lockAvailable())) { notify("This phone or browser can't do Face ID or fingerprint here."); return false; }
+            _lockBusy = true;
+            try {
+                const cred = await navigator.credentials.create({ publicKey: {
+                    challenge: crypto.getRandomValues(new Uint8Array(32)),
+                    rp: { name: 'SickleStrong' },
+                    user: { id: crypto.getRandomValues(new Uint8Array(16)), name: 'sicklestrong-app-lock', displayName: 'SickleStrong app lock' },
+                    pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+                    authenticatorSelection: { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'discouraged' },
+                    attestation: 'none', timeout: 60000,
+                } });
+                if (!cred) return false;
+                localStorage.setItem(LOCK_KEY, JSON.stringify({ id: _b64u(new Uint8Array(cred.rawId)), at: Date.now() }));
+                return true;
+            } catch (e) {
+                // Cancelled is not an error worth a scare.
+                notify(e && e.name === 'NotAllowedError' ? 'App lock was not turned on.' : "App lock couldn't be turned on on this phone.");
+                return false;
+            } finally { _lockBusy = false; }
+        }
+
+        async function _verifyLock() {
+            const rec = lockRecord();
+            if (!rec) return true;
+            const cred = await navigator.credentials.get({ publicKey: {
+                challenge: crypto.getRandomValues(new Uint8Array(32)),
+                allowCredentials: [{ type: 'public-key', id: _unb64u(rec.id), transports: ['internal'] }],
+                userVerification: 'required', timeout: 60000,
+            } });
+            return !!cred && _userVerified(cred);
+        }
+
+        function hideLockScreen() {
+            document.getElementById('ssLock')?.remove();
+            document.querySelectorAll('[data-lock-inert]').forEach((el) => { el.inert = false; el.removeAttribute('data-lock-inert'); });
+            _lockShown = false;
+        }
+
+        function showLockScreen() {
+            if (_lockShown || !lockRecord()) return;
+            _lockShown = true;
+            const overlay = document.createElement('div');
+            overlay.id = 'ssLock';
+            overlay.setAttribute('role', 'dialog');
+            overlay.setAttribute('aria-modal', 'true');
+            overlay.setAttribute('aria-label', 'SickleStrong is locked');
+            // Opaque and above everything but the sign-out card, which has to
+            // be reachable from here (.over-lock, below).
+            overlay.style.cssText = 'position:fixed;inset:0;z-index:6000;background:var(--bg,#f4f7f9);display:flex;'
+                + 'align-items:center;justify-content:center;padding:24px;text-align:center;overflow-y:auto;';
+            const card = document.createElement('div');
+            card.style.cssText = 'max-width:360px;width:100%;';
+            const heart = document.createElement('div');
+            heart.style.cssText = 'font-size:48px;line-height:1;margin-bottom:12px;';
+            heart.textContent = '💜';
+            const h = document.createElement('h1');
+            h.style.cssText = "font-size:24px;margin:0 0 8px;font-family:'Sora',sans-serif;color:var(--text,#1d2433);";
+            h.textContent = 'SickleStrong is locked';
+            const p = document.createElement('p');
+            p.style.cssText = 'font-size:16px;color:var(--text-light,#5b6475);margin:0 0 18px;line-height:1.5;';
+            p.textContent = "Use Face ID, your fingerprint, or your phone's passcode to open it.";
+            const open = document.createElement('button');
+            open.id = 'ssLockOpen';
+            open.className = 'btn btn-primary btn-full';
+            open.textContent = 'Unlock';
+            const msg = document.createElement('div');
+            msg.id = 'ssLockMsg';
+            msg.setAttribute('role', 'status');
+            msg.style.cssText = 'font-size:16px;color:var(--text-light,#5b6475);min-height:24px;margin:12px 0;';
+            // Reachable without unlocking: a caregiver in an emergency must
+            // never be stopped by this screen.
+            const call = document.createElement('a');
+            call.id = 'ssLockCall';
+            call.href = 'tel:911';
+            call.className = 'btn btn-secondary btn-full';
+            call.style.cssText = 'display:block;text-decoration:none;margin-bottom:10px;';
+            call.textContent = '🚨 Call 911';
+            const out = document.createElement('button');
+            out.id = 'ssLockSignOut';
+            out.type = 'button';
+            out.style.cssText = "background:none;border:none;font-size:16px;color:var(--primary,#0ea89a);cursor:pointer;text-decoration:underline;font-family:inherit;padding:8px;";
+            out.textContent = "Can't unlock? Sign out";
+            card.append(heart, h, p, open, msg, call, out);
+            overlay.appendChild(card);
+            document.body.appendChild(overlay);
+            // Keep what's behind out of reach of taps, focus and screen readers.
+            [...document.body.children].forEach((el) => {
+                if (el !== overlay && !el.inert) { el.inert = true; el.setAttribute('data-lock-inert', '1'); }
+            });
+
+            async function attempt(auto) {
+                if (_lockBusy) return;
+                _lockBusy = true; open.disabled = true;
+                let ok = false, err = null;
+                try { ok = await _verifyLock(); } catch (e) { err = e; }
+                _lockBusy = false; open.disabled = false;
+                if (ok) { hideLockScreen(); return; }
+                if (auto) return;   // the automatic try stays quiet; the button is right there
+                msg.textContent = (err && err.name === 'NotAllowedError') || !err
+                    ? 'Not unlocked. Tap Unlock to try again.'
+                    : "This phone doesn't recognize the lock anymore. Sign out below to reset it.";
+            }
+            open.addEventListener('click', () => attempt(false));
+            out.addEventListener('click', () => {
+                showSignOut();
+                const card2 = document.body.lastElementChild;
+                if (card2 && card2.classList.contains('modal')) card2.classList.add('over-lock');
+            });
+            // Try once straight away; iPhone may want a tap first, hence the button.
+            setTimeout(() => attempt(true), 200);
+        }
+
+        // Coming back to the app after a while locks it again.
+        document.addEventListener('visibilitychange', () => {
+            if (_lockBusy) return;
+            if (document.visibilityState === 'hidden') { _lockHiddenAt = Date.now(); return; }
+            if (_lockHiddenAt && Date.now() - _lockHiddenAt > LOCK_AFTER_MS) showLockScreen();
+            _lockHiddenAt = 0;
+        });
+
+        async function renderSettingsLockRow(modal) {
+            const row = modal.querySelector('#settingsLockRow');
+            if (!row) return;
+            const rec = lockRecord();
+            const [signedIn, available] = rec ? [true, true] : [await _signedIn(), await lockAvailable()];
+            if (!modal.isConnected) return;
+            row.replaceChildren();
+            row.style.cssText = 'background:var(--bg);padding:16px;border-radius:12px;margin-bottom:16px;';
+            const label = document.createElement('div');
+            label.style.cssText = 'font-weight:600;margin-bottom:4px;';
+            label.textContent = '🔒 App lock';
+            const desc = document.createElement('div');
+            desc.style.cssText = 'font-size:16px;color:var(--text-light);margin-bottom:12px;line-height:1.5;';
+            const fine = document.createElement('div');
+            fine.style.cssText = 'font-size:14px;color:var(--text-light);margin-top:10px;line-height:1.5;';
+            fine.textContent = 'This keeps other people out of the app on this phone. It does not encrypt what is saved on it.';
+            row.append(label, desc);
+            if (rec) {
+                desc.textContent = "On. SickleStrong asks for Face ID, your fingerprint, or your phone's passcode when you open it or come back to it.";
+                const off = document.createElement('button');
+                off.className = 'btn btn-secondary btn-full';
+                off.textContent = 'Turn off app lock';
+                off.addEventListener('click', async () => {
+                    if (!(await askConfirm('Turn off app lock on this phone?', { okLabel: 'Turn off' }))) return;
+                    try { localStorage.removeItem(LOCK_KEY); } catch (e) {}
+                    notify('App lock is off.');
+                    renderSettingsLockRow(modal);
+                });
+                row.append(off, fine);
+            } else if (!available) {
+                desc.textContent = "Not available on this phone or browser.";
+                row.append();
+            } else if (!signedIn) {
+                desc.textContent = 'Sign in to your account to use app lock.';
+            } else {
+                desc.textContent = 'Ask for Face ID or a fingerprint each time SickleStrong opens. A good idea on a shared or borrowed phone.';
+                const on = document.createElement('button');
+                on.className = 'btn btn-primary btn-full';
+                on.id = 'lockOnBtn';
+                on.textContent = 'Turn on app lock';
+                on.addEventListener('click', async () => {
+                    if (await enableAppLock()) { notify('App lock is on. Next time you open SickleStrong it will ask.'); renderSettingsLockRow(modal); }
+                });
+                row.append(on, fine);
+            }
+        }
+
         // ── Records from an old SickleStrong address ───────────────────────
         // Early beta families were sent to older addresses
         // (sickledcellstrong-test.netlify.app, sicklestrong.netlify.app). Those
@@ -11087,7 +11315,7 @@
                 try {
                     Object.keys(localStorage)
                         .filter(k => k === 'sickleStrongData' || k === 'ss_auth' || k === 'ss_auth_dismissed'
-                                  || k === 'ss_unsynced' || k === 'ss_pending_invite' || k === OUTBOX_KEY || k.startsWith('sb-'))
+                                  || k === 'ss_unsynced' || k === 'ss_pending_invite' || k === OUTBOX_KEY || k === LOCK_KEY || k.startsWith('sb-'))
                         .forEach(k => localStorage.removeItem(k));
                 } catch (e) {}
                 location.reload();
@@ -11691,6 +11919,8 @@
 
         document.addEventListener('DOMContentLoaded', async () => {
             loadData();
+            // App lock: covered before anything else paints or asks a question.
+            showLockScreen();
             // Records carried over from an old SickleStrong address (#rescue=).
             // Before anything decides between the setup wizard and the app: a
             // fresh phone that accepts them goes straight to the app.

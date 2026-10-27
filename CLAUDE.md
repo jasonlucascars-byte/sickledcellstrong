@@ -49,6 +49,7 @@ node tests/push-reminders.test.mjs           # 40 checks — Web Push encryption
 node tests/share-app.test.mjs                # 20 checks — share with another family: no child named, share code, QR decodes
 node tests/moved-rescue.test.mjs             # 21 checks — old addresses' records come over (#rescue=), ask first, merge only adds
 node tests/yellow-eyes.test.mjs              # 6 checks — body map → Log Symptoms with Jaundice ticked
+node tests/app-lock.test.mjs                 # 16 checks — Face ID/fingerprint lock (CDP virtual authenticator), autofill hints
 ```
 
 `share-app` also needs `npm i --no-save jsqr pngjs` (an independent QR reader).
@@ -201,6 +202,16 @@ email the teen named, picks the profile (`approve_teen_request` inserts the
 a teen account creating child profiles, so the waiting screen is a guide, not
 the lock. The privacy policy (landing repo, section 2) states these rules, so
 change both together.
+
+**App lock.** Opt-in in Settings (signed-in accounts only), device-only, key
+`ss_lock` (a WebAuthn platform-credential id, no secret). `showLockScreen()`
+runs right after `loadData()` at boot and again when the app returns from the
+background after 60 s. It checks the authenticator's user-verified flag, makes
+the rest of the page `inert`, and always offers Call 911 and "Can't unlock?
+Sign out" (which opens the normal sign-out card above the lock; sign-out
+removes `ss_lock`). It keeps other people out of the app; it is not encryption
+and the copy says so. It needs an account because the escape is sign-out, which
+erases the phone's copy.
 
 **Old addresses.** Early beta links pointed at sickledcellstrong-test.netlify.app
 and sicklestrong.netlify.app; those versions kept records only in that
