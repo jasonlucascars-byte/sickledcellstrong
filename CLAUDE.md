@@ -336,7 +336,7 @@ evidence the scheme is safe. Run it after touching any render function.
   `showCopyFallback()`.
 - Text is at least 16px for reading and 14px for labels; form controls
   default to 16px (iPhone zooms into smaller inputs). The one exception is the
-  bottom tab bar on phones: 12px, with short names (Log, SOS, Connect) so
+  bottom tab bar on phones: 12px, with short names (Log, SOS, Circle) so
   seven fit in 360px. `tests/quiet-messages.test.mjs` checks every tab.
 - Record ids are numbers for records made on this phone and uuid strings
   for records from the cloud. Pass them to inline handlers quoted —

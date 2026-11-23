@@ -1422,7 +1422,10 @@
                360px phone get ~48px each, so they run at 12px (iOS and
                Android tab bars use 10–12px for the same reason) and the three
                long ones swap to short names — at any readable size
-               "Symptoms", "Emergency" and "Community" truncated to "Sym…". */
+               "Symptoms", "Emergency" and "Community" truncated to "Sym…".
+               "Connect" was tried as the short name for Community and clipped
+               to "Connec…" at 375px and under in the real DM Sans (50.6px of
+               text in a 43-50px slot); "Circle" fits all seven at 320px. */
             .nav-label { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px !important; letter-spacing: 0; font-family: 'DM Sans', sans-serif; font-weight: 700; }
             .nav-full { display: none; }
             .nav-short { display: inline; }
@@ -1936,7 +1939,7 @@
             </div>
             <div class="nav-tab" onclick="switchTab('community')">
                 <span class="nav-icon">💬</span>
-                <span class="nav-label"><span class="nav-full">Community</span><span class="nav-short">Connect</span></span>
+                <span class="nav-label"><span class="nav-full">Community</span><span class="nav-short">Circle</span></span>
             </div>
             <div class="nav-tab" onclick="switchTab('notes')">
                 <span class="nav-icon">📖</span>

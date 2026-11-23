@@ -138,3 +138,23 @@ warnings without changing behavior.
 `rls_auto_enable` is worth knowing about for a good reason: it is an event
 trigger that automatically enables RLS on any new table created in `public`.
 That is a genuine safety net against a future table shipping unprotected.
+
+**6. Four "RLS enabled, no policy" notices are intentional.** The advisor
+reports `rls_enabled_no_policy` (INFO) for these tables, as of 9 Nov 2026:
+
+| Table | Why it has no policy |
+|---|---|
+| `public.referral_codes` | Share codes (`FAM-XXXXXX`) and partner codes (`NURSE-LEXI`). Reached only through the SECURITY DEFINER functions `get_my_referral_code()` and `my_referral_count()`; `anon` and `authenticated` have no table privileges. |
+| `public.teen_signup_requests` | Teen sign-up approvals. Reached only through `create_teen_request`, `lookup_teen_request` and `approve_teen_request`. |
+| `public.push_sent` | One row per reminder already sent, so a dose is pushed once. Read and written only by the `med-reminders` edge function with the service role. |
+| `private.push_config` | VAPID private key and cron secret. Service role only, via `get_push_config`. |
+
+With RLS on and no policy, every request from `anon` or `authenticated` is
+denied, which is the intent: **no one should read these directly.** Adding a
+policy would only open a door that is meant to stay shut. Do not "fix" the
+notice by adding one. If the notice is ever wanted gone, an explicit
+`USING (false)` policy says the same thing out loud, but it is a database change
+and is made out of band like the rest.
+
+If a *new* table appears in this list, that is not covered here: find out what
+it is before assuming it is the same.
