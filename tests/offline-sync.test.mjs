@@ -13,11 +13,22 @@
 // Run: node tests/offline-sync.test.mjs
 
 import { chromium } from 'playwright';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { readFileSync } from 'node:fs';
+import http from 'node:http';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const INDEX_URL = pathToFileURL(resolve(HERE, '..', 'index.html')).href;
+// Served over http://localhost, not file://. Two page loads of one file:// URL
+// do not reliably share storage in Chromium: sessionStorage is sometimes dropped
+// and a localStorage write made just before a reopen sometimes isn't visible to
+// it (reproduced on a bare page with no app code). That made this suite fail at
+// random, 5 checks at a time, as if an offline entry had been lost. Production
+// is https, where storage is consistent, so this matches it.
+const HTML = readFileSync(resolve(HERE, '..', 'index.html'));
+const server = http.createServer((q, r) => { r.setHeader('content-type', 'text/html'); r.end(HTML); });
+await new Promise((ok) => server.listen(0, '127.0.0.1', ok));
+const INDEX_URL = `http://localhost:${server.address().port}/`;
 const CHROMIUM = process.env.PW_CHROMIUM || '/opt/pw-browsers/chromium';
 
 const CHILD = '0b9c7a52-1111-4222-8333-444455556666';
@@ -108,7 +119,7 @@ async function scenario({ phone, cloud, net = 'up', signedIn = true }) {
   page.on('pageerror', (e) => pageErrors.push(e.message));
   await page.route('**/*', (route) => {
     const u = route.request().url();
-    if (u.startsWith('file://')) return route.continue();
+    if (u.startsWith(INDEX_URL)) return route.continue();
     if (u.includes('@supabase')) return route.fulfill({ contentType: 'application/javascript', body: STUB });
     return route.abort();
   });
@@ -331,6 +342,7 @@ const phoneWith = (child, extra = {}) => ({ setupComplete: true, currentChildId:
 check('No uncaught page errors', pageErrors.length === 0, [...new Set(pageErrors)].join(' | '));
 
 await browser.close();
+server.close();
 const failed = results.filter((x) => !x.ok).length;
 console.log(`\n${results.length - failed}/${results.length} passed`);
 process.exit(failed ? 1 : 0);
